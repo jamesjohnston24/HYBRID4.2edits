@@ -62,17 +62,27 @@ integer :: syr
 integer :: eyr
 integer :: varid
 integer :: ncid
-integer :: i
-integer :: j
+integer :: lon_dimid
+integer :: lat_dimid
+integer :: lon_varid
+integer :: lat_varid
+integer, dimension (2) :: dimids
+integer :: i,ii
+integer :: j,jj
 integer :: k
 integer :: nland
+real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water fraction
+real, allocatable, dimension (:,:) :: icwtr ! Ice/water fraction
 real, allocatable, dimension (:,:,:) :: tmp ! K
 real, allocatable, dimension (:,:,:) :: pre ! mm 6hr-1
 real, allocatable, dimension (:,:,:) :: spfh ! kg kg-1
 real, allocatable, dimension (:,:,:) :: pres ! Pa
 real, allocatable, dimension (:) :: lat ! degrees north
 real, allocatable, dimension (:) :: lon ! degrees east
-real :: isc ! Initial total soil C (kg[C] m-2)
+real, allocatable, dimension (:,:) :: isc ! Initial soil C (kg[C] m-2)
+real, allocatable, dimension (:,:) :: isc_grid ! Initial soil C (kg[C] m-2)
+real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2).
+real, allocatable, dimension (:,:) :: larea ! Grid-box area (km2).
 real :: t ! Temperature (degree C)
 real :: t_d ! Dew-point (degree C)
 real :: eo ! Penman evaporation from lake (mm day-1)
@@ -81,17 +91,53 @@ real :: vap ! Vapour pressure (Pa)
 real :: e ! Vapour pressure (mbar)
 real :: isc_total ! Total global soil C (Pg[C])
 real :: barea ! Area of grid-box at equation (m2)
-real :: larea ! Area of local grid-box (m2)
 real :: rlat ! Latitude (radians)
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-allocate (lon(nlon))
-allocate (lat (nlat))
-allocate (tmp (nlon,nlat,ntimes))
-allocate (pre (nlon,nlat,ntimes))
+allocate (lon  (nlon))
+allocate (lat  (nlat))
+allocate (icwtr_qd (2*nlon,2*nlat))
+allocate (icwtr (nlon,nlat))
+! Initial total soil C on non-ice/water fraction (kg[C] m-2)
+allocate (isc  (nlon,nlat))
+! Initial total soil C grid-box mean (kg[C] m-2)
+allocate (isc_grid  (nlon,nlat))
+allocate (larea_qd (2*nlon,2*nlat))
+allocate (larea (nlon,nlat))
+allocate (tmp  (nlon,nlat,ntimes))
+allocate (pre  (nlon,nlat,ntimes))
 allocate (spfh (nlon,nlat,ntimes))
 allocate (pres (nlon,nlat,ntimes))
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Read in ice/water fractions for each grid-box, and areas (km2).
+! Water is ocean and freshwater bodies from map.
+!----------------------------------------------------------------------!
+file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
+&LUH2_new/staticData_quarterdeg.nc'
+write (*, *) 'Reading from ', trim (file_name)
+call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
+varid = 7
+call check (nf90_get_var (ncid, varid, icwtr_qd))
+varid = 9
+call check (nf90_get_var (ncid, varid, larea_qd))
+call check (nf90_close (ncid))
+!----------------------------------------------------------------------!
+! Input file is 1/4 degree, so gridded to 1/2 degree. Need to invert.
+! Assume no missing values.
+!----------------------------------------------------------------------!
+jj = 1
+do j = 1, nlat
+ ii = 1
+ do i = 1, nlon
+  icwtr (i, nlat-j+1) = sum (icwtr_qd (ii:ii+1, jj:jj+1)) / 4.0
+  larea (i, nlat-j+1) = sum (larea_qd (ii:ii+1, jj:jj+1))
+  ii = ii + 2
+ end do
+ jj = jj + 2
+end do
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -201,6 +247,8 @@ do kyr = syr, eyr
  !---------------------------------------------------------------------!
  if (kyr == syr) then
   isc_total = 0.0
+  isc (:, :) = 0.0
+  isc_grid (:,:) = 0.0
   !--------------------------------------------------------------------!
   ! Area of grid-box at equator (m2).
   !--------------------------------------------------------------------!
@@ -234,21 +282,52 @@ do kyr = syr, eyr
      end do ! it
      ! Annual precipitation (m yr-1).
      pt = max (eps, sum (pre (i, j, 1:ntimes))) / 1000.0
-     ! Local soil C (kg[C] / m-2).
+     ! Local soil C on vegetated fraction (kg[C] / m-2).
      if ((eo / pt) < 0.5) then
-      isc = 36.7 - 53.3 * eo / pt
+      isc (i, j) = 36.7 - 53.3 * eo / pt
      else
-      isc = 10.8 - 1.6 * eo / pt
+      isc (i, j) = 10.8 - 1.6 * eo / pt
      end if ! eo / pt
-     isc = max (isc, zero)
-     !write (*,*)i,j,isc,eo,pt
+     isc (i, j) = max (isc (i, j), zero)
+     !write (*,*)i,j,isc (i, j),eo,pt
      ! Area of grid-box (m2).
-     larea = cos (rlat) * barea
-     isc_total = isc_total + isc * larea
+     !larea = cos (rlat) * barea
+     isc_grid (i, j) = (1.0 - icwtr (i, j)) * isc (i, j)
+     isc_total = isc_total + isc_grid (i, j) * larea (i, j) * 1.0e6
     end if ! fillvalue
    end do ! i
   end do ! j
   write (*,*) 'isc_total = ', isc_total / 1.0e12, 'Pg[C]'
+  ! Output the global isc field.
+  file_name = "isc_grid.nc"
+  write (*, *) 'Writing to ', trim (file_name)
+  ! Create netCDF dataset and enter define mode.
+  call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+              ncid = ncid))
+  ! Define the dimensions.
+  call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
+  call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
+  ! Define coordinate variables.
+  call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
+              lon_varid))
+  call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
+              lat_varid))
+  dimids = (/ lon_dimid, lat_dimid /)
+  ! Assign units attributes to coordinate data.
+  call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
+  call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+  ! Define variable.
+  call check (nf90_def_var (ncid, "Soil C", nf90_float, dimids, varid))
+  call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
+  ! End definitions.
+  call check (nf90_enddef (ncid))
+  ! Write data.
+  call check (nf90_put_var (ncid, lon_varid, lon))
+  call check (nf90_put_var (ncid, lat_varid, lat))
+  call check (nf90_put_var (ncid,     varid, isc_grid))
+  ! Close file.
+  call check (nf90_close (ncid))
  end if ! kyr == syr
  !---------------------------------------------------------------------!
  
