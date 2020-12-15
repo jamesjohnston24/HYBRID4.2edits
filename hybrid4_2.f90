@@ -3,8 +3,8 @@ program hybrid4_2
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-! Learn from /home/adf10/MODELS/HYBRID10 on CSD3 for how to use TRENDY forcings.
-! FW00 is Friend AD, White A. 2000. Eval...
+! Learn from /home/adf10/MODELS/HYBRID10 on CSD3 for how to use
+! TRENDY forcings. FW00 is Friend AD, White A. 2000. Eval...
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -17,6 +17,28 @@ implicit none
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
+! Options if run locally.
+!----------------------------------------------------------------------!
+logical :: local = .FALSE. ! Run only local site?
+logical :: wrclim = .FALSE. ! Write local climate?
+!----------------------------------------------------------------------!
+! Uggla site.
+!----------------------------------------------------------------------!
+!real, parameter :: lon_w = 19.0 + 46.0 / 60.0
+!real, parameter :: lat_w = 64.0 + 21.0 / 60.0
+!----------------------------------------------------------------------!
+! Grudd site.
+!----------------------------------------------------------------------!
+real, parameter :: lon_w = 19.75
+real, parameter :: lat_w = 68.25
+!----------------------------------------------------------------------!
+! Indices of local site, if used.
+!----------------------------------------------------------------------!
+integer :: i_w
+integer :: j_w
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
 integer, parameter :: nlon = 720
 integer, parameter :: nlat = 360
 integer, parameter :: ntimes = 1460
@@ -24,12 +46,13 @@ real, parameter :: fillvalue = 1.0e20
 real, parameter :: tf = 273.15
 real, parameter :: eps = 1.0e-8
 real, parameter :: zero = 0.0
-! Uggla site.
-!real, parameter :: lon_w = 19.0 + 46.0 / 60.0
-!real, parameter :: lat_w = 64.0 + 21.0 / 60.0
-! Grudd site.
-real, parameter :: lon_w = 19.75
-real, parameter :: lat_w = 68.25
+! Mol. weight of dry air (kg [air] mol-1)
+real, parameter :: m_air = 28.9647
+! Mol. weight of water (kg [water] mol-1)
+real, parameter :: m_water = 18.01528
+! Earth's circumference at equator (m2).
+real, parameter :: circ = 40075.0e3
+real, parameter :: pi = 3.14159265359
 character (len = 250) :: file_name ! Generic filename
 character (len = 100) :: var_name
 character (len =     4) :: char_year
@@ -43,13 +66,11 @@ integer :: i
 integer :: j
 integer :: k
 integer :: nland
-integer :: i_w
-integer :: j_w
 real, allocatable, dimension (:,:,:) :: tmp ! K
 real, allocatable, dimension (:,:,:) :: pre ! mm 6hr-1
 real, allocatable, dimension (:,:,:) :: spfh ! kg kg-1
 real, allocatable, dimension (:,:,:) :: pres ! Pa
-real, allocatable, dimension (: ) :: lat ! degrees north
+real, allocatable, dimension (:) :: lat ! degrees north
 real, allocatable, dimension (:) :: lon ! degrees east
 real :: isc ! Initial total soil C (kg[C] m-2)
 real :: t ! Temperature (degree C)
@@ -58,27 +79,34 @@ real :: eo ! Penman evaporation from lake (mm day-1)
 real :: pt ! Annual precipiation (m yr-1)
 real :: vap ! Vapour pressure (Pa)
 real :: e ! Vapour pressure (mbar)
-real :: m_air = 28.9647 ! Mol. weight of dry air (kg [air] mol-1)
-real :: m_water = 18.01528 ! Mol. weight of water (kg [water] mol-1)
+real :: isc_total ! Total global soil C (Pg[C])
+real :: barea ! Area of grid-box at equation (m2)
+real :: larea ! Area of local grid-box (m2)
+real :: rlat ! Latitude (radians)
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
+allocate (lon(nlon))
+allocate (lat (nlat))
 allocate (tmp (nlon,nlat,ntimes))
 allocate (pre (nlon,nlat,ntimes))
 allocate (spfh (nlon,nlat,ntimes))
 allocate (pres (nlon,nlat,ntimes))
-allocate (lon(nlon))
-allocate (lat (nlat))
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-! Gridbox indices for containing wanted site in climate data.
-!----------------------------------------------------------------------!
-i_w = nint ((719.0 / 2.0) * (1.0 + lon_w / 179.75)) + 1
-j_w = nint ((359.0 / 2.0) * (1.0 + lat_w /   89.75)) + 1
-write(*,*) 'i_w j_w ',i_w,j_w
-if (lat_w == (64.0 + 21.0 / 60.0)) open (20,file='uggla.clm',status='unknown')
-if (lat_w == 68.25) open (20,file='grudd.clm',status='unknown')
+if (local) then
+ !---------------------------------------------------------------------!
+ ! Gridbox indices for local site.
+ !---------------------------------------------------------------------!
+ i_w = nint ((719.0 / 2.0) * (1.0 + lon_w / 179.75)) + 1
+ j_w = nint ((359.0 / 2.0) * (1.0 + lat_w /   89.75)) + 1
+ write(*,*) 'i_w j_w ',i_w,j_w
+ if (lat_w == (64.0 + 21.0 / 60.0)) open (20,file='uggla.clm',&
+  status='unknown')
+ if (lat_w == 68.25) open (20,file='grudd.clm',status='unknown')
+ !---------------------------------------------------------------------!
+end if
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -155,22 +183,40 @@ do kyr = syr, eyr
  !---------------------------------------------------------------------!
  
  !---------------------------------------------------------------------!
- ! Climate output if needed.
- do it = 1, ntimes
-  write (20,'(2i5,f12.4,f12.5)') kyr,it,tmp(i_w,j_w,it),pre(i_w,j_w,it)
- end do
+ if ((local) .and. (wrclim)) then
+  !--------------------------------------------------------------------!
+  ! Climate output of local climate.
+  !--------------------------------------------------------------------!
+  do it = 1, ntimes
+   write (20,'(2i5,f12.4,f12.5)') kyr,it,tmp(i_w,j_w,it),pre(i_w,j_w,it)
+  end do
+  !--------------------------------------------------------------------!
+ end if
  !---------------------------------------------------------------------!
 
+ !---------------------------------------------------------------------!
  ! If first year, set total soil C using relationship in Fig. 2 of
  ! FW00, given by Eqn. 3.
  ! Annual potential evaporation, from Linacre (1977)? (m yr-1).
+ !---------------------------------------------------------------------!
  if (kyr == syr) then
+  isc_total = 0.0
+  !--------------------------------------------------------------------!
+  ! Area of grid-box at equator (m2).
+  !--------------------------------------------------------------------!
+  barea = (circ / float (nlon)) ** 2
+  !--------------------------------------------------------------------!
   do j = 1, nlat
+   !-------------------------------------------------------------------!
+   ! Latitude (radians).
+   !-------------------------------------------------------------------!
+   rlat = lat (j) * pi / 180.0
+   !-------------------------------------------------------------------!
    do i = 1, nlon
     if (tmp (i, j, 1) /= fillvalue) then
      eo = 0.0 ! Penman lake evaporation (m yr-1)
      do it = 1, ntimes
-      ! Temperature (degree C)>
+      ! Temperature (degree C).
       t = tmp (i, j, it) - tf
       ! Vapour pressure (Pa).
       vap = pres (i, j, it) * spfh (i, j, it) * m_air / m_water
@@ -188,16 +234,23 @@ do kyr = syr, eyr
      end do ! it
      ! Annual precipitation (m yr-1).
      pt = max (eps, sum (pre (i, j, 1:ntimes))) / 1000.0
+     ! Local soil C (kg[C] / m-2).
      if ((eo / pt) < 0.5) then
       isc = 36.7 - 53.3 * eo / pt
      else
       isc = 10.8 - 1.6 * eo / pt
      end if ! eo / pt
-     !write(*,*)lat(j),pt,eo,isc
+     isc = max (isc, zero)
+     !write (*,*)i,j,isc,eo,pt
+     ! Area of grid-box (m2).
+     larea = cos (rlat) * barea
+     isc_total = isc_total + isc * larea
     end if ! fillvalue
    end do ! i
   end do ! j
+  write (*,*) 'isc_total = ', isc_total / 1.0e12, 'Pg[C]'
  end if ! kyr == syr
+ !---------------------------------------------------------------------!
  
  !---------------------------------------------------------------------!
  ! Loop through gridboxes and integrate state variables at land points.
@@ -214,10 +267,10 @@ do kyr = syr, eyr
   end do ! j
  end do ! i
  !---------------------------------------------------------------------!
-
+stop
 end do ! kyr = syr, eyr
 !----------------------------------------------------------------------!
-close (20) ! Climate output if needed.
+if ((local) .and. (wrclim)) close (20) ! Local climate output.
 
 !----------------------------------------------------------------------!
 write (*,*) 'nland = ', nland
