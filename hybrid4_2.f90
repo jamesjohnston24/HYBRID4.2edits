@@ -19,7 +19,7 @@ implicit none
 !----------------------------------------------------------------------!
 ! Options if run locally.
 !----------------------------------------------------------------------!
-logical :: local = .FALSE. ! Run only local site?
+logical :: local  = .TRUE. ! Run only local site?
 logical :: wrclim = .FALSE. ! Write local climate?
 !----------------------------------------------------------------------!
 ! Uggla site.
@@ -29,8 +29,13 @@ logical :: wrclim = .FALSE. ! Write local climate?
 !----------------------------------------------------------------------!
 ! Grudd site.
 !----------------------------------------------------------------------!
-real, parameter :: lon_w = 19.75
-real, parameter :: lat_w = 68.25
+!real, parameter :: lon_w = 19.75
+!real, parameter :: lat_w = 68.25
+!----------------------------------------------------------------------!
+! Cambridge.
+!----------------------------------------------------------------------!
+real, parameter :: lon_w =  0.108
+real, parameter :: lat_w = 52.198
 !----------------------------------------------------------------------!
 ! Indices of local site, if used.
 !----------------------------------------------------------------------!
@@ -39,9 +44,12 @@ integer :: j_w
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
+! Noise on initial soil C across plots?
+logical, parameter :: ran_s = .TRUE.
 integer, parameter :: nlon = 720
 integer, parameter :: nlat = 360
 integer, parameter :: ntimes = 1460
+integer, parameter :: nplots = 10
 real, parameter :: fillvalue = 1.0e20
 real, parameter :: tf = 273.15
 real, parameter :: eps = 1.0e-8
@@ -50,9 +58,18 @@ real, parameter :: zero = 0.0
 real, parameter :: m_air = 28.9647
 ! Mol. weight of water (kg [water] mol-1)
 real, parameter :: m_water = 18.01528
-! Earth's circumference at equator (m2).
-real, parameter :: circ = 40075.0e3
 real, parameter :: pi = 3.14159265359
+real, parameter :: iscv = 0.2 ! Range of initial soil C
+! N:C ratio of surface structural litter.
+real, parameter :: vu =  1.0 / 150.0
+! N:C ratio of soil structural litter.
+real, parameter :: vv =  1.0 / 150.0
+! N:C ratio of active soil organic matter pool.
+real, parameter :: va =  1.0 /  15.0
+! N:C ratio of slow soil organic matter pool.
+real, parameter :: vs =  1.0 /  20.0
+! N:C ratio of slow soil passive organic matter pool.
+real, parameter :: vpa = 1.0 / 10.0
 character (len = 250) :: file_name ! Generic filename
 character (len = 100) :: var_name
 character (len =     4) :: char_year
@@ -67,9 +84,10 @@ integer :: lat_dimid
 integer :: lon_varid
 integer :: lat_varid
 integer, dimension (2) :: dimids
-integer :: i,ii
-integer :: j,jj
+integer :: i,ii,i1,i2
+integer :: j,jj,j1,j2
 integer :: k
+integer :: kp
 integer :: nland
 real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water fraction
 real, allocatable, dimension (:,:) :: icwtr ! Ice/water fraction
@@ -81,8 +99,22 @@ real, allocatable, dimension (:) :: lat ! degrees north
 real, allocatable, dimension (:) :: lon ! degrees east
 real, allocatable, dimension (:,:) :: isc ! Initial soil C (kg[C] m-2)
 real, allocatable, dimension (:,:) :: isc_grid ! Initial soil C (kg[C] m-2)
-real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2).
-real, allocatable, dimension (:,:) :: larea ! Grid-box area (km2).
+real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2)
+real, allocatable, dimension (:,:) :: larea ! Grid-box area (km2)
+real, allocatable, dimension (:,:,:) :: Cu
+real, allocatable, dimension (:,:,:) :: Cm
+real, allocatable, dimension (:,:,:) :: Cv
+real, allocatable, dimension (:,:,:) :: Cn
+real, allocatable, dimension (:,:,:) :: Ca
+real, allocatable, dimension (:,:,:) :: Cs
+real, allocatable, dimension (:,:,:) :: Cpa
+real, allocatable, dimension (:,:,:) :: Nu
+real, allocatable, dimension (:,:,:) :: Nm
+real, allocatable, dimension (:,:,:) :: Nv
+real, allocatable, dimension (:,:,:) :: Nn
+real, allocatable, dimension (:,:,:) :: Na
+real, allocatable, dimension (:,:,:) :: Ns
+real, allocatable, dimension (:,:,:) :: Npa
 real :: t ! Temperature (degree C)
 real :: t_d ! Dew-point (degree C)
 real :: eo ! Penman evaporation from lake (mm day-1)
@@ -90,8 +122,10 @@ real :: pt ! Annual precipiation (m yr-1)
 real :: vap ! Vapour pressure (Pa)
 real :: e ! Vapour pressure (mbar)
 real :: isc_total ! Total global soil C (Pg[C])
-real :: barea ! Area of grid-box at equation (m2)
-real :: rlat ! Latitude (radians)
+real :: ran ! Random number (0-1)
+real :: Noise ! Noise on initial soil C (ratio)
+real :: vm ! N:C ratio of surface metabolic litter
+real :: vn ! N:C ratio of soil metabolic litter
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -109,6 +143,20 @@ allocate (tmp  (nlon,nlat,ntimes))
 allocate (pre  (nlon,nlat,ntimes))
 allocate (spfh (nlon,nlat,ntimes))
 allocate (pres (nlon,nlat,ntimes))
+allocate (Cu   (nlon,nlat,nplots))
+allocate (Cm   (nlon,nlat,nplots))
+allocate (Cv   (nlon,nlat,nplots))
+allocate (Cn   (nlon,nlat,nplots))
+allocate (Ca   (nlon,nlat,nplots))
+allocate (Cs   (nlon,nlat,nplots))
+allocate (Cpa  (nlon,nlat,nplots))
+allocate (Nu   (nlon,nlat,nplots))
+allocate (Nm   (nlon,nlat,nplots))
+allocate (Nv   (nlon,nlat,nplots))
+allocate (Nn   (nlon,nlat,nplots))
+allocate (Na   (nlon,nlat,nplots))
+allocate (Ns   (nlon,nlat,nplots))
+allocate (Npa  (nlon,nlat,nplots))
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -152,6 +200,15 @@ if (local) then
   status='unknown')
  if (lat_w == 68.25) open (20,file='grudd.clm',status='unknown')
  !---------------------------------------------------------------------!
+ i1 = i_w
+ i2 = i_w
+ j1 = j_w
+ j2 = j_w
+else
+ i1 = 1
+ i2 = nlon
+ j1 = 1
+ j2 = nlat
 end if
 !----------------------------------------------------------------------!
 
@@ -243,42 +300,40 @@ do kyr = syr, eyr
  !---------------------------------------------------------------------!
  ! If first year, set total soil C using relationship in Fig. 2 of
  ! FW00, given by Eqn. 3.
- ! Annual potential evaporation, from Linacre (1977)? (m yr-1).
+ ! Annual potential evaporation, from Linacre (1977) (m yr-1).
+ ! Could use 30-yr climatology, but this is simpler for now.
  !---------------------------------------------------------------------!
  if (kyr == syr) then
   isc_total = 0.0
   isc (:, :) = 0.0
   isc_grid (:,:) = 0.0
   !--------------------------------------------------------------------!
-  ! Area of grid-box at equator (m2).
-  !--------------------------------------------------------------------!
-  barea = (circ / float (nlon)) ** 2
-  !--------------------------------------------------------------------!
-  do j = 1, nlat
+  do j = j1, j2
    !-------------------------------------------------------------------!
-   ! Latitude (radians).
-   !-------------------------------------------------------------------!
-   rlat = lat (j) * pi / 180.0
-   !-------------------------------------------------------------------!
-   do i = 1, nlon
+   do i = i1, i2
     if (tmp (i, j, 1) /= fillvalue) then
      eo = 0.0 ! Penman lake evaporation (m yr-1)
      do it = 1, ntimes
-      ! Temperature (degree C).
-      t = tmp (i, j, it) - tf
-      ! Vapour pressure (Pa).
-      vap = pres (i, j, it) * spfh (i, j, it) * m_air / m_water
-      ! Vapour pressure (mbar).
-      e = vap / 100.0
-      e = max (eps, e)
-      ! Dew-point, based on https://archive.eol.ucar.edu/projects/
-      !ceop/dm/documents/refdata_report/eqns.html (degree C).
-      t_d =  log (e / 6.112) * 243.5 / (17.67 - log (e / 6.112))
-      t_d = min (t, t_d)
-      ! Sum Penman lake evaporation (m yr-1).
-      eo = eo + (0.001 / 4.0) * (700.0 * (t + 0.6) / &
-           (100.0 - abs (lat (j))) + 15.0 * (t - t_d)) / (80.0 - t)
-      eo = max (zero, eo)
+      if (mod (it,4) == 0.0) then
+       ! Temperature (degree C).
+       t = sum (tmp (i, j, it-3:it)) / 4.0 - tf
+       ! Vapour pressure (Pa).
+       vap = sum (pres (i, j, it-3:it)) * sum (spfh (i, j, it-3:it)) * &
+             m_air / m_water
+       ! Vapour pressure (mbar).
+       e = vap / 100.0
+       e = max (eps, e)
+       ! Dew-point, based on https://archive.eol.ucar.edu/projects/
+       !ceop/dm/documents/refdata_report/eqns.html (degree C).
+       t_d = log (e / 6.112) * 243.5 / (17.67 - log (e / 6.112))
+       t_d = min (t, t_d)
+       ! Sum Penman lake evaporation (m yr-1).
+       eo = eo + 0.001 * (700.0 * (t + 0.6) / &
+            (100.0 - abs (lat (j))) + 15.0 * (t - t_d)) / (80.0 - t)
+       eo = max (zero, eo)
+       !if ((local) .and. (i == i_w) .and. (j == j_w)) &
+       ! write (*,*)i_w,j_w,eo,t,t_d
+      end if
      end do ! it
      ! Annual precipitation (m yr-1).
      pt = max (eps, sum (pre (i, j, 1:ntimes))) / 1000.0
@@ -289,45 +344,97 @@ do kyr = syr, eyr
       isc (i, j) = 10.8 - 1.6 * eo / pt
      end if ! eo / pt
      isc (i, j) = max (isc (i, j), zero)
-     !write (*,*)i,j,isc (i, j),eo,pt
-     ! Area of grid-box (m2).
-     !larea = cos (rlat) * barea
      isc_grid (i, j) = (1.0 - icwtr (i, j)) * isc (i, j)
      isc_total = isc_total + isc_grid (i, j) * larea (i, j) * 1.0e6
+     !if ((local) .and. (i == i_w) .and. (j == j_w)) &
+     ! write (*,*)i_w,j_w,isc (i_w, j_w),eo,pt
+     !-----------------------------------------------------------------!
+     ! Now assign values to all soil C and N pools.
+     !-----------------------------------------------------------------!
+     do kp = 1, nplots
+      !----------------------------------------------------------------!
+      ! Noise on initial soil C across plots?
+      !----------------------------------------------------------------!
+      if (ran_s) then
+       !---------------------------------------------------------------!
+       call random_number (ran)
+       !---------------------------------------------------------------!
+       ! iscv is noise in initial soil C.
+       !---------------------------------------------------------------!
+       noise = 2.0 * iscv * ran + (1.0 - iscv)
+       !---------------------------------------------------------------!
+      else
+       !---------------------------------------------------------------!
+       noise = 1.0
+       !---------------------------------------------------------------!
+      end if
+      ! Surface structural litter C and N (kg m-2).
+      Cu  (i, j, kp) = isc (i, j) * noise * 0.5  / 14.34
+      Nu  (i, j, kp) = Cu (i, j, kp) * vu
+      ! Surface metabolic litter C and N (kg m-2).
+      Cm  (i, j, kp) = isc (i, j) * noise * 0.0  / 14.34
+      vm = 0.07 ! Initial N:C.
+      Nm  (i, j, kp) = Cm (i, j, kp) * vm
+      ! Soil structural C and N (kg m-2).
+      Cv  (i, j, kp) = isc (i, j) * noise * 0.5  / 14.34
+      Nv  (i, j, kp) = Cv (i, j, kp) * vv
+      ! Soil metabolic litter C and N (kg m-2).
+      Cn  (i, j, kp) = isc (i, j) * noise * 0.0  / 14.34
+      vn = 0.07 ! Initial N:C.
+      Nn  (i, j, kp) = Cn (i, j, kp) * vn
+      ! Surface + soil active (microbe) C and N (kg m-2).
+      Ca  (i, j, kp) = isc (i, j) * noise * 0.34 / 14.34
+      Na  (i, j, kp) = Ca (i, j, kp) * va
+      ! Slow C and N (kg m-2).
+      Cs  (i, j, kp) = isc (i, j) * noise * 5.0  / 14.34
+      Ns  (i, j, kp) = Cs (i, j, kp) * vs
+      ! Passive C and N (kg m-2).
+      Cpa (i, j, kp) = isc (i, j) * noise * 8.0  / 14.34
+      Npa  (i, j, kp) = Cpa (i, j, kp) * vpa
+      if (local) write (*, *) kp, isc (i, j), Cm (i, j, kp), &
+       Cv (i, j, kp), Cn (i, j, kp), Ca (i, j, kp), Cs (i, j, kp), &
+       Cpa (i, j, kp)
+      if (local) write (*, *) kp, isc (i, j), Nm (i, j, kp), &
+       Nv (i, j, kp), Nn (i, j, kp), Na (i, j, kp), Ns (i, j, kp), &
+       Npa (i, j, kp)
+     end do ! kp
     end if ! fillvalue
    end do ! i
   end do ! j
-  write (*,*) 'isc_total = ', isc_total / 1.0e12, 'Pg[C]'
-  ! Output the global isc field.
-  file_name = "isc_grid.nc"
-  write (*, *) 'Writing to ', trim (file_name)
-  ! Create netCDF dataset and enter define mode.
-  call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
-              ncid = ncid))
-  ! Define the dimensions.
-  call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
-  call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
-  ! Define coordinate variables.
-  call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
-              lon_varid))
-  call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
-              lat_varid))
-  dimids = (/ lon_dimid, lat_dimid /)
-  ! Assign units attributes to coordinate data.
-  call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
-  call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
-  ! Define variable.
-  call check (nf90_def_var (ncid, "Soil C", nf90_float, dimids, varid))
-  call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2"))
-  call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
-  ! End definitions.
-  call check (nf90_enddef (ncid))
-  ! Write data.
-  call check (nf90_put_var (ncid, lon_varid, lon))
-  call check (nf90_put_var (ncid, lat_varid, lat))
-  call check (nf90_put_var (ncid,     varid, isc_grid))
-  ! Close file.
-  call check (nf90_close (ncid))
+  if (.NOT. (local)) then
+   write (*,*) 'isc_total = ', isc_total / 1.0e12, 'Pg[C]'
+   ! Output the global isc field.
+   file_name = "isc_grid.nc"
+   write (*, *) 'Writing to ', trim (file_name)
+   ! Create netCDF dataset and enter define mode.
+   call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+               ncid = ncid))
+   ! Define the dimensions.
+   call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
+   call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
+   ! Define coordinate variables.
+   call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
+               lon_varid))
+   call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
+               lat_varid))
+   dimids = (/ lon_dimid, lat_dimid /)
+   ! Assign units attributes to coordinate data.
+   call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
+   call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+   ! Define variable.
+   call check (nf90_def_var (ncid, "Soil C", nf90_float, dimids, varid))
+   call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
+   ! End definitions.
+   call check (nf90_enddef (ncid))
+   ! Write data.
+   call check (nf90_put_var (ncid, lon_varid, lon))
+   call check (nf90_put_var (ncid, lat_varid, lat))
+   call check (nf90_put_var (ncid,     varid, isc_grid))
+   ! Close file.
+   call check (nf90_close (ncid))
+  end if
+  !--------------------------------------------------------------------!
  end if ! kyr == syr
  !---------------------------------------------------------------------!
  
@@ -369,3 +476,4 @@ contains
 
 end program hybrid4_2
 !======================================================================!
+
