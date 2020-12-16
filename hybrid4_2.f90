@@ -19,7 +19,8 @@ implicit none
 !----------------------------------------------------------------------!
 ! Options if run locally.
 !----------------------------------------------------------------------!
-logical :: local  = .TRUE. ! Run only local site?
+!logical :: local  = .TRUE. ! Run only local site?
+logical :: local  = .FALSE. ! Run only local site?
 logical :: wrclim = .FALSE. ! Write local climate?
 !----------------------------------------------------------------------!
 ! Uggla site.
@@ -46,6 +47,10 @@ integer :: j_w
 !----------------------------------------------------------------------!
 ! Noise on initial soil C across plots?
 logical, parameter :: ran_s = .TRUE.
+! Start from restart file?
+logical, parameter :: rsf_in = .FALSE.
+! Write to restart file?
+logical, parameter :: rsf_out = .TRUE.
 integer, parameter :: nlon = 720
 integer, parameter :: nlat = 360
 integer, parameter :: ntimes = 1460
@@ -54,9 +59,9 @@ real, parameter :: fillvalue = 1.0e20
 real, parameter :: tf = 273.15
 real, parameter :: eps = 1.0e-8
 real, parameter :: zero = 0.0
-! Mol. weight of dry air (kg [air] mol-1)
+! Mol. weight of dry air (kg [air] mol-1).
 real, parameter :: m_air = 28.9647
-! Mol. weight of water (kg [water] mol-1)
+! Mol. weight of water (kg [water] mol-1).
 real, parameter :: m_water = 18.01528
 real, parameter :: pi = 3.14159265359
 real, parameter :: iscv = 0.2 ! Range of initial soil C
@@ -78,6 +83,8 @@ integer :: it
 integer :: syr
 integer :: eyr
 integer :: varid
+integer :: varid_Cm,varid_Cu,varid_Cn,varid_Cv,varid_Ca,varid_Cs,varid_Cpa
+integer :: varid_Nm,varid_Nu,varid_Nn,varid_Nv,varid_Na,varid_Ns,varid_Npa
 integer :: ncid
 integer :: lon_dimid
 integer :: lat_dimid
@@ -159,6 +166,8 @@ allocate (Ns   (nlon,nlat,nplots))
 allocate (Npa  (nlon,nlat,nplots))
 !----------------------------------------------------------------------!
 
+Cpa (:,:,:) = zero
+
 !----------------------------------------------------------------------!
 ! Read in ice/water fractions for each grid-box, and areas (km2).
 ! Water is ocean and freshwater bodies from map.
@@ -213,8 +222,15 @@ end if
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
+if (rsf_in) then
+ !open ('rsf_in.nc'...
+end if
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
 syr = 1901
-eyr = 2019
+eyr = 1901
+!eyr = 2019
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -297,6 +313,7 @@ do kyr = syr, eyr
  end if
  !---------------------------------------------------------------------!
 
+ if (.NOT. (rsf_in)) then
  !---------------------------------------------------------------------!
  ! If first year, set total soil C using relationship in Fig. 2 of
  ! FW00, given by Eqn. 3.
@@ -422,7 +439,7 @@ do kyr = syr, eyr
    call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
    call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
    ! Define variable.
-   call check (nf90_def_var (ncid, "Soil C", nf90_float, dimids, varid))
+   call check (nf90_def_var (ncid, "Soil_C", nf90_float, dimids, varid))
    call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2"))
    call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
    ! End definitions.
@@ -434,6 +451,7 @@ do kyr = syr, eyr
    ! Close file.
    call check (nf90_close (ncid))
   end if
+  end if ! .NOT. (rsf_in)
   !--------------------------------------------------------------------!
  end if ! kyr == syr
  !---------------------------------------------------------------------!
@@ -453,9 +471,94 @@ do kyr = syr, eyr
   end do ! j
  end do ! i
  !---------------------------------------------------------------------!
-stop
 end do ! kyr = syr, eyr
 !----------------------------------------------------------------------!
+
+! Output state variables to restart file if required.
+if (rsf_out) then
+   file_name = "rsf_out.nc"
+   write (*, *) 'Writing to ', trim (file_name)
+   ! Create netCDF dataset and enter define mode.
+   call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+               ncid = ncid))
+   ! Define the dimensions.
+   call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
+   call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
+   ! Define coordinate variables.
+   call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
+               lon_varid))
+   call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
+               lat_varid))
+   dimids = (/ lon_dimid, lat_dimid /)
+   ! Assign units attributes to coordinate data.
+   call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
+   call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+   ! Define variables.
+   call check (nf90_def_var (ncid, "Surface_metabolic_organic_C", &
+    nf90_float, dimids, varid_Cm))
+   call check (nf90_def_var (ncid, "Surface_structural_organic_C", &
+    nf90_float, dimids, varid_Cu))
+   call check (nf90_def_var (ncid, "Soil_metabolic_organic_C", &
+    nf90_float, dimids, varid_Cn))
+   call check (nf90_def_var (ncid, "Soil_structural_organic_C", &
+    nf90_float, dimids, varid_Cv))
+   call check (nf90_def_var (ncid, "Active_organic_C", &
+    nf90_float, dimids, varid_Ca))
+   call check (nf90_def_var (ncid, "Slow_organic_C", &
+    nf90_float, dimids, varid_Cs))
+   call check (nf90_def_var (ncid, "Passive_soil_organic_C", &
+    nf90_float, dimids, varid_Cpa))
+   call check (nf90_def_var (ncid, "Surface_metabolic_organic_N", &
+    nf90_float, dimids, varid_Nm))
+   call check (nf90_def_var (ncid, "Surface_structural_organic_N", &
+    nf90_float, dimids, varid_Nu))
+   call check (nf90_def_var (ncid, "Soil_metabolic_organic_N", &
+    nf90_float, dimids, varid_Nn))
+   call check (nf90_def_var (ncid, "Soil_structural_organic_N", &
+    nf90_float, dimids, varid_Nv))
+   call check (nf90_def_var (ncid, "Active_organic_N", &
+    nf90_float, dimids, varid_Na))
+   call check (nf90_def_var (ncid, "Slow_organic_N", &
+    nf90_float, dimids, varid_Ns))
+   call check (nf90_def_var (ncid, "Passive_soil_organic_N", &
+    nf90_float, dimids, varid_Npa))
+   call check (nf90_put_att (ncid, varid_Cm , "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Cu , "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Cn , "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Cv , "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Ca , "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Cs , "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Cpa, "units", "kg[C] m-2"))
+   call check (nf90_put_att (ncid, varid_Nm , "units", "kg[N] m-2"))
+   call check (nf90_put_att (ncid, varid_Nu , "units", "kg[N] m-2"))
+   call check (nf90_put_att (ncid, varid_Nn , "units", "kg[N] m-2"))
+   call check (nf90_put_att (ncid, varid_Nv , "units", "kg[N] m-2"))
+   call check (nf90_put_att (ncid, varid_Na , "units", "kg[N] m-2"))
+   call check (nf90_put_att (ncid, varid_Ns , "units", "kg[N] m-2"))
+   call check (nf90_put_att (ncid, varid_Npa, "units", "kg[N] m-2"))
+   ! End definitions.
+   call check (nf90_enddef (ncid))
+   ! Write data.
+   call check (nf90_put_var (ncid, lon_varid, lon))
+   call check (nf90_put_var (ncid, lat_varid, lat))
+   call check (nf90_put_var (ncid, varid_Cm , Cm))
+   call check (nf90_put_var (ncid, varid_Cu , Cu))
+   call check (nf90_put_var (ncid, varid_Cn , Cn))
+   call check (nf90_put_var (ncid, varid_Cv , Cv))
+   call check (nf90_put_var (ncid, varid_Ca , Ca))
+   call check (nf90_put_var (ncid, varid_Cs , Cs))
+   call check (nf90_put_var (ncid, varid_Cpa, Cpa))
+   call check (nf90_put_var (ncid, varid_Nm , Nm))
+   call check (nf90_put_var (ncid, varid_Nu , Nu))
+   call check (nf90_put_var (ncid, varid_Nn , Nn))
+   call check (nf90_put_var (ncid, varid_Nv , Nv))
+   call check (nf90_put_var (ncid, varid_Na , Na))
+   call check (nf90_put_var (ncid, varid_Ns , Ns))
+   call check (nf90_put_var (ncid, varid_Npa, Npa))
+   ! Close file.
+   call check (nf90_close (ncid))
+end if
+
 if ((local) .and. (wrclim)) close (20) ! Local climate output.
 
 !----------------------------------------------------------------------!
