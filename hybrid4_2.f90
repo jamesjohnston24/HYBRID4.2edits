@@ -48,9 +48,11 @@ integer :: j_w
 ! Noise on initial soil C across plots?
 logical, parameter :: ran_s = .TRUE.
 ! Start from restart file?
-logical, parameter :: rsf_in = .FALSE.
+!logical, parameter :: rsf_in = .FALSE.
+logical, parameter :: rsf_in = .TRUE.
 ! Write to restart file?
-logical, parameter :: rsf_out = .TRUE.
+logical, parameter :: rsf_out = .FALSE.
+!logical, parameter :: rsf_out = .TRUE.
 integer, parameter :: nlon = 720
 integer, parameter :: nlat = 360
 integer, parameter :: ntimes = 1460
@@ -88,9 +90,12 @@ integer :: varid_Nm,varid_Nu,varid_Nn,varid_Nv,varid_Na,varid_Ns,varid_Npa
 integer :: ncid
 integer :: lon_dimid
 integer :: lat_dimid
+integer :: plot_dimid
 integer :: lon_varid
 integer :: lat_varid
-integer, dimension (2) :: dimids
+integer :: plot_varid
+integer, dimension (2) :: dimids_two
+integer, dimension (3) :: dimids_three
 integer :: i,ii,i1,i2
 integer :: j,jj,j1,j2
 integer :: k
@@ -104,14 +109,15 @@ real, allocatable, dimension (:,:,:) :: spfh ! kg kg-1
 real, allocatable, dimension (:,:,:) :: pres ! Pa
 real, allocatable, dimension (:) :: lat ! degrees north
 real, allocatable, dimension (:) :: lon ! degrees east
+integer, allocatable, dimension (:) :: plot ! No. of plot
 real, allocatable, dimension (:,:) :: isc ! Initial soil C (kg[C] m-2)
 real, allocatable, dimension (:,:) :: isc_grid ! Initial soil C (kg[C] m-2)
 real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2)
 real, allocatable, dimension (:,:) :: larea ! Grid-box area (km2)
-real, allocatable, dimension (:,:,:) :: Cu
 real, allocatable, dimension (:,:,:) :: Cm
-real, allocatable, dimension (:,:,:) :: Cv
+real, allocatable, dimension (:,:,:) :: Cu
 real, allocatable, dimension (:,:,:) :: Cn
+real, allocatable, dimension (:,:,:) :: Cv
 real, allocatable, dimension (:,:,:) :: Ca
 real, allocatable, dimension (:,:,:) :: Cs
 real, allocatable, dimension (:,:,:) :: Cpa
@@ -138,6 +144,7 @@ real :: vn ! N:C ratio of soil metabolic litter
 !----------------------------------------------------------------------!
 allocate (lon  (nlon))
 allocate (lat  (nlat))
+allocate (plot (nplots))
 allocate (icwtr_qd (2*nlon,2*nlat))
 allocate (icwtr (nlon,nlat))
 ! Initial total soil C on non-ice/water fraction (kg[C] m-2)
@@ -150,10 +157,10 @@ allocate (tmp  (nlon,nlat,ntimes))
 allocate (pre  (nlon,nlat,ntimes))
 allocate (spfh (nlon,nlat,ntimes))
 allocate (pres (nlon,nlat,ntimes))
-allocate (Cu   (nlon,nlat,nplots))
 allocate (Cm   (nlon,nlat,nplots))
-allocate (Cv   (nlon,nlat,nplots))
+allocate (Cu   (nlon,nlat,nplots))
 allocate (Cn   (nlon,nlat,nplots))
+allocate (Cv   (nlon,nlat,nplots))
 allocate (Ca   (nlon,nlat,nplots))
 allocate (Cs   (nlon,nlat,nplots))
 allocate (Cpa  (nlon,nlat,nplots))
@@ -166,7 +173,20 @@ allocate (Ns   (nlon,nlat,nplots))
 allocate (Npa  (nlon,nlat,nplots))
 !----------------------------------------------------------------------!
 
+Cn  (:,:,:) = zero
+Cu  (:,:,:) = zero
+Cm  (:,:,:) = zero
+Cv  (:,:,:) = zero
+Ca  (:,:,:) = zero
+Cs  (:,:,:) = zero
 Cpa (:,:,:) = zero
+Nn  (:,:,:) = zero
+Nu  (:,:,:) = zero
+Nm  (:,:,:) = zero
+Nv  (:,:,:) = zero
+Na  (:,:,:) = zero
+Ns  (:,:,:) = zero
+Npa (:,:,:) = zero
 
 !----------------------------------------------------------------------!
 ! Read in ice/water fractions for each grid-box, and areas (km2).
@@ -223,7 +243,48 @@ end if
 
 !----------------------------------------------------------------------!
 if (rsf_in) then
- !open ('rsf_in.nc'...
+ file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_in.nc'
+ write (*,*) 'Reading from ',trim(file_name)
+ call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
+ varid = 1
+ call check (nf90_get_var (ncid, varid, lon))
+ varid = 2
+ call check (nf90_get_var (ncid, varid, lat))
+ varid = 3
+ call check (nf90_get_var (ncid, varid, plot))
+ varid = 4
+ call check (nf90_get_var (ncid, varid, Cm))
+ varid = 5
+ call check (nf90_get_var (ncid, varid, Cu))
+ varid = 6
+ call check (nf90_get_var (ncid, varid, Cn))
+ varid = 7
+ call check (nf90_get_var (ncid, varid, Cv))
+ varid = 8
+ call check (nf90_get_var (ncid, varid, Ca))
+ varid = 9
+ call check (nf90_get_var (ncid, varid, Cs))
+ varid = 10
+ call check (nf90_get_var (ncid, varid, Cpa))
+ varid = 11
+ call check (nf90_get_var (ncid, varid, Nm))
+ varid = 12
+ call check (nf90_get_var (ncid, varid, Nu))
+ varid = 13
+ call check (nf90_get_var (ncid, varid, Nn))
+ varid = 14
+ call check (nf90_get_var (ncid, varid, Nv))
+ varid = 15
+ call check (nf90_get_var (ncid, varid, Na))
+ varid = 16
+ call check (nf90_get_var (ncid, varid, Ns))
+ varid = 17
+ call check (nf90_get_var (ncid, varid, Npa))
+ call check (nf90_close (ncid))
+else
+ do kp = 1, nplots
+  plot (kp) = kp
+ end do
 end if
 !----------------------------------------------------------------------!
 
@@ -434,12 +495,12 @@ do kyr = syr, eyr
                lon_varid))
    call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
                lat_varid))
-   dimids = (/ lon_dimid, lat_dimid /)
+   dimids_two = (/ lon_dimid, lat_dimid /)
    ! Assign units attributes to coordinate data.
    call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
    call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
    ! Define variable.
-   call check (nf90_def_var (ncid, "Soil_C", nf90_float, dimids, varid))
+   call check (nf90_def_var (ncid, "Soil_C", nf90_float, dimids_two, varid))
    call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2"))
    call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
    ! End definitions.
@@ -476,52 +537,55 @@ end do ! kyr = syr, eyr
 
 ! Output state variables to restart file if required.
 if (rsf_out) then
-   file_name = "rsf_out.nc"
+   file_name = "/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_out.nc"
    write (*, *) 'Writing to ', trim (file_name)
    ! Create netCDF dataset and enter define mode.
    call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
                ncid = ncid))
    ! Define the dimensions.
-   call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
-   call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
+   call check (nf90_def_dim (ncid, "longitude", nlon  , lon_dimid))
+   call check (nf90_def_dim (ncid, "latitude" , nlat  , lat_dimid))
+   call check (nf90_def_dim (ncid, "plot"     , nplots, plot_dimid))
    ! Define coordinate variables.
    call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
                lon_varid))
    call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
                lat_varid))
-   dimids = (/ lon_dimid, lat_dimid /)
+   call check (nf90_def_var (ncid, "plot"     , nf90_int  , plot_dimid, &
+               plot_varid))
+   dimids_three = (/ lon_dimid, lat_dimid, plot_dimid /)
    ! Assign units attributes to coordinate data.
    call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
    call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
    ! Define variables.
    call check (nf90_def_var (ncid, "Surface_metabolic_organic_C", &
-    nf90_float, dimids, varid_Cm))
+    nf90_float, dimids_three, varid_Cm))
    call check (nf90_def_var (ncid, "Surface_structural_organic_C", &
-    nf90_float, dimids, varid_Cu))
+    nf90_float, dimids_three, varid_Cu))
    call check (nf90_def_var (ncid, "Soil_metabolic_organic_C", &
-    nf90_float, dimids, varid_Cn))
+    nf90_float, dimids_three, varid_Cn))
    call check (nf90_def_var (ncid, "Soil_structural_organic_C", &
-    nf90_float, dimids, varid_Cv))
+    nf90_float, dimids_three, varid_Cv))
    call check (nf90_def_var (ncid, "Active_organic_C", &
-    nf90_float, dimids, varid_Ca))
+    nf90_float, dimids_three, varid_Ca))
    call check (nf90_def_var (ncid, "Slow_organic_C", &
-    nf90_float, dimids, varid_Cs))
+    nf90_float, dimids_three, varid_Cs))
    call check (nf90_def_var (ncid, "Passive_soil_organic_C", &
-    nf90_float, dimids, varid_Cpa))
+    nf90_float, dimids_three, varid_Cpa))
    call check (nf90_def_var (ncid, "Surface_metabolic_organic_N", &
-    nf90_float, dimids, varid_Nm))
+    nf90_float, dimids_three, varid_Nm))
    call check (nf90_def_var (ncid, "Surface_structural_organic_N", &
-    nf90_float, dimids, varid_Nu))
+    nf90_float, dimids_three, varid_Nu))
    call check (nf90_def_var (ncid, "Soil_metabolic_organic_N", &
-    nf90_float, dimids, varid_Nn))
+    nf90_float, dimids_three, varid_Nn))
    call check (nf90_def_var (ncid, "Soil_structural_organic_N", &
-    nf90_float, dimids, varid_Nv))
+    nf90_float, dimids_three, varid_Nv))
    call check (nf90_def_var (ncid, "Active_organic_N", &
-    nf90_float, dimids, varid_Na))
+    nf90_float, dimids_three, varid_Na))
    call check (nf90_def_var (ncid, "Slow_organic_N", &
-    nf90_float, dimids, varid_Ns))
+    nf90_float, dimids_three, varid_Ns))
    call check (nf90_def_var (ncid, "Passive_soil_organic_N", &
-    nf90_float, dimids, varid_Npa))
+    nf90_float, dimids_three, varid_Npa))
    call check (nf90_put_att (ncid, varid_Cm , "units", "kg[C] m-2"))
    call check (nf90_put_att (ncid, varid_Cu , "units", "kg[C] m-2"))
    call check (nf90_put_att (ncid, varid_Cn , "units", "kg[C] m-2"))
@@ -541,6 +605,7 @@ if (rsf_out) then
    ! Write data.
    call check (nf90_put_var (ncid, lon_varid, lon))
    call check (nf90_put_var (ncid, lat_varid, lat))
+   call check (nf90_put_var (ncid, plot_varid, plot))
    call check (nf90_put_var (ncid, varid_Cm , Cm))
    call check (nf90_put_var (ncid, varid_Cu , Cu))
    call check (nf90_put_var (ncid, varid_Cn , Cn))
