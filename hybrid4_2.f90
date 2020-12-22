@@ -67,7 +67,7 @@ real, parameter :: m_air = 28.9647
 ! Mol. weight of water (kg [water] mol-1).
 real, parameter :: m_water = 18.01528
 real, parameter :: pi = 3.14159265359
-real, parameter :: iscv = 0.2 ! Range of initial soil C
+real, parameter :: iscv = 0.2 ! Range of initial soil C (+/-fraction)
 ! N:C ratio of surface structural litter.
 real, parameter :: vu =  1.0 / 150.0
 ! N:C ratio of soil structural litter.
@@ -76,9 +76,44 @@ real, parameter :: vv =  1.0 / 150.0
 real, parameter :: va =  1.0 /  15.0
 ! N:C ratio of slow soil organic matter pool.
 real, parameter :: vs =  1.0 /  20.0
-! N:C ratio of slow soil passive organic matter pool.
+! N:C ratio of soil passive organic matter pool.
 real, parameter :: vpa = 1.0 / 10.0
 real, parameter :: area = 200.0 ! Plot area (m2)
+real, parameter :: texture = 0.5 ! Soil texture (units?).
+real, parameter :: Ts_local = 0.3 ! Sand fraction?
+real, parameter :: plf = 0.01 + 0.04 * Ts_local
+! Biomass C content (fration).
+real, parameter :: w = 0.45
+! Lignin to biomass ratio in leaf litter.
+real, parameter :: lfl = 0.20
+! Lignin to biomass ratio in root litter.
+real, parameter :: lrl = 0.16
+! Partition coefficients.
+real, parameter :: pau = 0.55 * (one - lfl)
+real, parameter :: psu = 0.7 * lfl
+real, parameter :: pav = 0.45 * (one - lfl)
+real, parameter :: psv = 0.7 * lfl
+real, parameter :: pam = 0.45
+real, parameter :: pan = 0.45
+real, parameter :: psab = 0.486
+real, parameter :: ppa = 0.004
+real, parameter :: pas = 0.42
+real, parameter :: pps = 0.03
+real, parameter :: pap = 0.45
+! Decay rates base values from Comins & McMurtrie (1993), but
+! doubled to allow for inclusion of the soil water factor (/day).
+real, parameter :: d2pb = 2.0 * 0.28    / 7.0
+real, parameter :: d4pb = 2.0 * 0.35    / 7.0
+real, parameter :: d6pb = 2.0 * 0.0038  / 7.0
+real, parameter :: d7pb = 2.0 * 0.00013 / 7.0
+real, parameter :: emf = 0.05 ! N emission (fraction).
+real, parameter :: Nad = 0.0 ! N addition (kg[N] m-2 day-1).
+real, parameter :: nfx = 0.0 ! N fixation (kg[N] m-2 day-1).
+! Pre-industrial N deposition at 0 m ppt (kg[N] ha-2 yr-1 ->
+! kg[N] m-2 day-1).
+real, parameter :: ndepi = 10.0 / (10000.0 * 365.0)
+! d_one is max. swc of top layer for roots (m).
+real, parameter :: d_one = 0.2
 character (len = 250) :: file_name ! Generic filename
 character (len = 100) :: var_name
 character (len =     4) :: char_year
@@ -117,7 +152,7 @@ real, allocatable, dimension (:,:,:) :: pres ! Pa
 real, allocatable, dimension (:) :: lat ! degrees north
 real, allocatable, dimension (:) :: lon ! degrees east
 real, allocatable, dimension (:,:) :: isc ! Initial soil C (kg[C] m-2)
-real, allocatable, dimension (:,:) :: isc_grid ! Initial soil C (kg[C] m-2)
+real, allocatable, dimension (:,:) :: isc_grid ! Init soil C (kg[C] m-2)
 real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2)
 real, allocatable, dimension (:,:) :: larea ! Grid-box area (km2)
 real, allocatable, dimension (:,:,:) :: Cm
@@ -127,6 +162,7 @@ real, allocatable, dimension (:,:,:) :: Cv
 real, allocatable, dimension (:,:,:) :: Ca
 real, allocatable, dimension (:,:,:) :: Cs
 real, allocatable, dimension (:,:,:) :: Cpa
+real, allocatable, dimension (:,:,:) :: soilC
 real, allocatable, dimension (:,:,:) :: Nu
 real, allocatable, dimension (:,:,:) :: Nm
 real, allocatable, dimension (:,:,:) :: Nv
@@ -135,10 +171,16 @@ real, allocatable, dimension (:,:,:) :: Na
 real, allocatable, dimension (:,:,:) :: Ns
 real, allocatable, dimension (:,:,:) :: Npa
 real, allocatable, dimension (:,:,:) :: snmin
+real, allocatable, dimension (:,:,:) :: soilN
 integer, allocatable, dimension (:,:,:) :: nind
+! Soil water holding capacity (m).
+real, allocatable, dimension (:,:,:) :: swct
 real, allocatable, dimension (:,:,:) :: soilw1
 real, allocatable, dimension (:,:,:) :: soilw2
 real, allocatable, dimension (:,:,:) :: soilw3
+real, allocatable, dimension (:,:,:) :: swc1
+real, allocatable, dimension (:,:,:) :: swc2
+real, allocatable, dimension (:,:,:) :: swc3
 real, allocatable, dimension (:) :: wlittc
 real, allocatable, dimension (:) :: wlittn
 real, allocatable, dimension (:) :: flittc
@@ -166,8 +208,24 @@ real :: flitterc
 real :: flittern
 real :: rlitterc
 real :: rlittern
-real :: swct ! Soil water holding capacity (m)
 real :: wfps ! Water-filled pore space (%)
+real :: outflow
+real :: h2o_30
+real :: pleach
+real :: pmf
+real :: puf
+real :: pnr
+real :: pvr
+real :: psa
+real :: d1pb,d3pb,d5pb
+real :: d1p,d2p,d3p,d4p,d5p,d6p,d7p
+real :: d1C,d2C,d3C,d4C,d5C,d6C,d7C
+real :: dCu,dCm,dCv,dCn,dCa,dCs,dCpa,dCle
+real :: Ju,Jv,Ja,Js,Jpa
+real :: NmfNmw,Nnr
+real :: dNu,dNm,dNv,dNn,dNa,dNs,dNpa
+real :: temp,C0,N0,Cleach,Nmin,U,Ndepo,nf
+real :: sresp ! Soil respiration (kg[C] m-1 day-1)
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -193,6 +251,7 @@ allocate (Cv   (nlon,nlat,nplots))
 allocate (Ca   (nlon,nlat,nplots))
 allocate (Cs   (nlon,nlat,nplots))
 allocate (Cpa  (nlon,nlat,nplots))
+allocate (soilC (nlon,nlat,nplots))
 allocate (Nu   (nlon,nlat,nplots))
 allocate (Nm   (nlon,nlat,nplots))
 allocate (Nv   (nlon,nlat,nplots))
@@ -201,10 +260,15 @@ allocate (Na   (nlon,nlat,nplots))
 allocate (Ns   (nlon,nlat,nplots))
 allocate (Npa  (nlon,nlat,nplots))
 allocate (snmin (nlon,nlat,nplots))
+allocate (soilN (nlon,nlat,nplots))
 allocate (nind (nlon,nlat,nplots))
+allocate (swct   (nlon,nlat,nplots))
 allocate (soilw1 (nlon,nlat,nplots))
 allocate (soilw2 (nlon,nlat,nplots))
 allocate (soilw3 (nlon,nlat,nplots))
+allocate (swc1 (nlon,nlat,nplots))
+allocate (swc2 (nlon,nlat,nplots))
+allocate (swc3 (nlon,nlat,nplots))
 allocate (wlittc (nplots))
 allocate (wlittn (nplots))
 allocate (flittc (nplots))
@@ -327,6 +391,12 @@ if (rsf_in) then
  call check (nf90_get_var (ncid, varid, snmin))
  varid = 19
  call check (nf90_get_var (ncid, varid, nind))
+ varid = 20
+ call check (nf90_get_var (ncid, varid, soilw1))
+ varid = 21
+ call check (nf90_get_var (ncid, varid, soilw2))
+ varid = 22
+ call check (nf90_get_var (ncid, varid, soilw3))
  call check (nf90_close (ncid))
 else
  do kp = 1, nplots
@@ -342,7 +412,7 @@ eyr = 1901
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-if (.NOT. (rsf_in)) then ! Set soil C, N, water;  plot nind.
+if (.NOT. (rsf_in)) then ! Set soil C, N, water; plot nind.
 do kyr = syr, syr
 
  !---------------------------------------------------------------------!
@@ -370,7 +440,7 @@ do kyr = syr, syr
  call check (nf90_get_var (ncid, varid, tmp))
  call check (nf90_close (ncid))
  !---------------------------------------------------------------------!
- ! Read precipitation fields for year kyr intp pre (mm 6hr-1.
+ ! Read precipitation fields for year kyr intp pre (mm 6hr-1).
  !---------------------------------------------------------------------!
  var_name = 'pre'
  file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
@@ -578,7 +648,8 @@ do kyr = syr, syr
    call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
    call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
    ! Define variable.
-   call check (nf90_def_var (ncid, "Soil_C", nf90_float, dimids_two, varid))
+   call check (nf90_def_var (ncid, "Soil_C", nf90_float, &
+               dimids_two, varid))
    call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2"))
    call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
    ! End definitions.
@@ -592,13 +663,58 @@ do kyr = syr, syr
   end if
  end do ! kyr = syr, syr
 end if ! .NOT. (rsf_in)
-  !--------------------------------------------------------------------!
- !---------------------------------------------------------------------!
+!----------------------------------------------------------------------!
  
+!----------------------------------------------------------------------!
+! Initialised either from rsf or standard values. Now set some
+! derived initial quantities.
+!----------------------------------------------------------------------!
+do j = j1, j2
  !---------------------------------------------------------------------!
- ! Loop through gridboxes and integrate state variables at land points.
- ! Climate files start at 
- !---------------------------------------------------------------------!
+ do i = i1, i2
+  if (tmp (i, j, 1) /= fillvalue) then
+   do kp = 1, nplots
+    ! Total soil C (kg[C] m-2).
+    soilC (i,j,kp) = Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + &
+                     Cn (i,j,kp) + Ca (i,j,kp) + Cs (i,j,kp) + &
+                     Cpa (i,j,kp)
+    ! Total soil N (kg[N] m-2).
+    soilN (i,j,kp) = Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + &
+                     Nn (i,j,kp) + Na (i,j,kp) + Ns (i,j,kp) + &
+                     Npa (i,j,kp)
+    !------------------------------------------------------------------!
+    ! Soil water holding capacity (Eqn. (1) of FW00; m).
+    !------------------------------------------------------------------!
+    swct (i,j,kp) = 0.213 + 0.00227 * soilC (i, j, kp)
+    !------------------------------------------------------------------!
+    ! Soil water holding capacities of layers (m).
+    ! d_one is max. swc of top layer for roots.
+    !------------------------------------------------------------------!
+    if (swct (i,j,kp) <= 0.05) then
+     swc1 (i,j,kp) = swct (i,j,kp)
+     swc2 (i,j,kp) = 0.0
+     swc3 (i,j,kp) = 0.0
+    else
+     if (swct (i,j,kp) <= d_one) THEN
+       swc1 (i,j,kp) = 0.05
+       swc2 (i,j,kp) = swct (i,j,kp) - 0.05
+       swc3 (i,j,kp) = 0.0
+     else
+       swc1 (i,j,kp) = 0.05
+       swc2 (i,j,kp) = d_one - 0.05
+       swc3 (i,j,kp) = swct (i,j,kp) - d_one
+     end if
+    end if
+   end do
+  end if
+ end do
+end do
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Loop through gridboxes and integrate state variables at land points.
+! Climate files start at 1901, run through 2019.
+!----------------------------------------------------------------------!
 do kyr = syr, eyr
 
  !---------------------------------------------------------------------!
@@ -628,8 +744,15 @@ do kyr = syr, eyr
    if (tmp (i, j, 1) /= fillvalue) then
     nland = nland + 1
     do it = 1, ntimes
+     !****adf
+     outflow = 0.0 ! Daily outflow (m).
+     !****adf
      ! End of day?
      if (mod (it, 4) == zero) then
+      !****adf
+      nf = ndepi
+      !****adf
+      Ndepo = nf + 4.0e-3 * sum (pre (i, j, it-3:it)) / 1000.0
       do kp = 1, nplots
        wlittc (kp) = zero
        wlittn (kp) = zero
@@ -673,16 +796,44 @@ do kyr = syr, eyr
        flittn (kp) = flittn (kp) / area
        rlittc (kp) = rlittc (kp) / area
        rlittn (kp) = rlittn (kp) / area
+       !---------------------------------------------------------------!
+       ! Decay rates base values (/day). Taken from Comins &
+       ! McMurtrie (1993), but doubled to allow for inclusion of the
+       ! soil water factor.
+       !---------------------------------------------------------------!
+       d1pb = 2.0 * 0.076 * exp (-3.0 * lfl) / 7.0
+       d3pb = 2.0 * 0.094 * exp (-3.0 * lrl) / 7.0
+       d5pb = 2.0 * 0.14 * (one - 0.75 * texture)  / 7.0
+       !---------------------------------------------------------------!
        ! Soil water holding capacity (Eqn. (1) of FW00; m).
-       swct = 0.213 + 0.00227 * (Cm (i, j, kp) + Cu (i, j, kp) + &
-        Cn (i, j, kp) + Cv (i, j, kp) + Ca (i, j, kp) + &
-        Cs (i, j, kp) + Cpa (i, j, kp))
+       !---------------------------------------------------------------!
+       swct (i,j,kp) = 0.213 + 0.00227 * soilC (i, j, kp)
+       !---------------------------------------------------------------!
+       ! Soil water holding capacities of layers (m).
+       ! d_one is max. swc of top layer for roots.
+       !---------------------------------------------------------------!
+       if (swct (i,j,kp) <= 0.05) then
+        swc1 (i,j,kp) = swct (i,j,kp)
+        swc2 (i,j,kp) = 0.0
+        swc3 (i,j,kp) = 0.0
+       else
+        if (swct (i,j,kp) <= d_one) THEN
+          swc1 (i,j,kp) = 0.05
+          swc2 (i,j,kp) = swct (i,j,kp) - 0.05
+          swc3 (i,j,kp) = 0.0
+        else
+          swc1 (i,j,kp) = 0.05
+          swc2 (i,j,kp) = d_one - 0.05
+          swc3 (i,j,kp) = swct (i,j,kp) - d_one
+        end if
+       end if
+       !---------------------------------------------------------------!
        ! Convert soil water to water-filled pore space.
-       ! Assumes micro-pore space = swc and macro-pore space = 42% saturation
-       ! content (from TEM, for loam; Raich et al., 1991).
-       if (swct > eps) then
+       ! Assumes micro-pore space = swc and macro-pore space = 42%
+       ! saturation content (from TEM, for loam; Raich et al., 1991).
+       if (swct (i,j,kp) > eps) then
         wfps = 100.0 * (soilw1 (i, j, kp) + soilw2 (i, j, kp) + &
-                        soilw3 (i, j, kp)) / (1.7241 * swct)
+                        soilw3 (i, j, kp)) / (1.7241 * swct (i,j,kp))
        else
         wfps = 0.00001
        end if
@@ -697,9 +848,146 @@ do kyr = syr, eyr
        em_soil = min (one , em_soil)
        ! Overall decomposition modifier.
        ev = et_soil * em_soil
-      write (*,*) it/4,Cpa(i,j,1),et_soil,em_soil,ev
+       ! Soil microbe leach fraction.
+       h2o_30 = outflow
+       pleach = 0.05555 * h2o_30 * plf
+       ! Partitioning coefficients.
+       if (flittn (kp) > eps) then
+        pmf = 0.85 - 0.018 * lfl / (w * flittn (kp) / flittc (kp))
+	pmf = max (zero, pmf)
+       else
+        pmf = zero
+       end if
+       puf = one - pmf
+       if (rlittn (kp) > eps) then
+        pnr = 0.85 - 0.018 * lrl / (w * rlittn (kp) / rlittc (kp))
+	pnr = max (zero, pnr)
+       else
+        pnr = zero
+       end if
+       pvr = one - pnr
+       psa = psab - pleach
+       ! Decay rates (/day).
+       d1p = ev * d1pb
+       d2p = ev * d2pb
+       d3p = ev * d3pb
+       d4p = ev * d4pb
+       d5p = ev * d5pb
+       d6p = ev * d6pb
+       d7p = ev * d7pb
+       ! C decays (kg[C] m-2 day-1).
+       d1C = d1p * Cu  (i,j,kp)
+       d2C = d2p * Cm  (i,j,kp)
+       d3C = d3p * Cv  (i,j,kp)
+       d4C = d4p * Cn  (i,j,kp)
+       d5C = d5p * Ca  (i,j,kp)
+       d6C = d6p * Cs  (i,j,kp)
+       d7C = d7p * Cpa (i,j,kp)
+       ! C fluxes between litter pools.
+       dCu = puf * flittc (kp) + wlittc (kp) - d1C
+       dCm = pmf * flittc (kp)               - d2C
+       dCv = pvr * rlittc (kp)               - d3C
+       dCn = pnr * rlittc (kp)               - d4C
+       ! C fluxes to soil pools.
+       Ja  = pau * d1C + pam * d2C + pav * d3C + pan * d4C + &
+             pas * d6C + pap * d7C
+       Js  = psu * d1C + psv * d3C + psa * d5C
+       Jpa = ppa * d5C + pps * d6C
+       ! C fluxes between soil pools.
+       dCa  = Ja  - d5C
+       dCs  = Js  - d6C
+       dCpa = Jpa - d7C
+       dCle = pleach * d5C
+       ! C fluxes to structural litter pools.
+       Ju = puf * flittc (kp) + wlittc (kp)
+       Jv = pvr * rlittc (kp)
+       ! N flux from surface litter to surface metabolic.
+       NmfNmw = flittn (kp) + wlittn (kp) - vu * Ju
+       ! N flux from root litter to soil metabolic.
+       Nnr = rlittn (kp) - vv * Jv
+       ! N fluxes between litter pools.
+       dNu = vu * Ju - d1p * Nu (i,j,kp)
+       dNm = NmfNmw  - d2p * Nm (i,j,kp)
+       dNv = vv * Jv - d3p * Nv (i,j,kp)
+       dNn = Nnr     - d4p * Nn (i,j,kp)
+       ! Constrained forms, if required.
+       if ((Cm (i,j,kp) + dCm) > eps) then
+        temp = (Nm (i,j,kp) + dNm) / (Cm (i,j,kp) + dCm)
+       else
+	temp = one
+       end if
+       if (temp < (one / 25.0)) then
+        vm = one / 25.0
+        NmfNmw = vm * pmf * flittc (kp)
+        dNm    = NmfNmw - d2p * Nm (i,j,kp)
+       end if
+       if (temp > (one / 10.0)) then
+        vm = one / 10.0
+        NmfNmw = vm * pmf * flittc (kp)
+        dNm    = NmfNmw - d2p * Nm (i,j,kp)
+       end if
+       if ((Cn (i,j,kp) + dCn) > eps) then
+        temp = (Nn (i,j,kp) + dNn) / (Cn (i,j,kp) + dCn)
+       else
+        temp = one
+       end if
+       if (temp < (one / 25.0)) then
+        vn = one / 25.0
+        Nnr    = vn * pnr * rlittc (kp)
+        dNn    = Nnr    - d4p * Nn (i,j,kp)
+       end if
+       if (temp > (one / 10.0)) then
+        vn = one / 10.0
+        Nnr    = vn * pnr * rlittc (kp)
+        dNn    = Nnr    - d4p * Nn (i,j,kp)
+       end if
+       ! N fluxes between soil pools.
+       dNa  = va  * Ja  - d5p * Na  (i,j,kp)
+       dNs  = vs  * Js  - d6p * Ns  (i,j,kp)
+       dNpa = vpa * Jpa - d7p * Npa (i,j,kp)
+       ! Inital total C.
+       C0 = flittc (kp) + wlittc (kp) + rlittc (kp) + &
+            Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + Cn (i,j,kp) + &
+            Ca (i,j,kp) + Cs (i,j,kp) + Cpa (i,j,kp)
+       ! Initial total N.
+       N0 = flittn (kp) + wlittn (kp) + rlittn (kp) + &
+            Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + Nn (i,j,kp) + &
+            Na (i,j,kp) + Ns (i,j,kp) + Npa (i,j,kp)
+       ! Update C pools.
+       Cu (i,j,kp) = Cu (i,j,kp) + dCu
+       Cm (i,j,kp) = Cm (i,j,kp) + dCm
+       Cv (i,j,kp) = Cv (i,j,kp) + dCv
+       Cn (i,j,kp) = Cn (i,j,kp) + dCn
+       Ca (i,j,kp) = Ca (i,j,kp) + dCa
+       Cs (i,j,kp) = Cs (i,j,kp) + dCs
+       Cpa (i,j,kp) = Cpa (i,j,kp) + dCpa
+       ! Following does not appear to be used.
+       Cleach = dCle
+       ! Update N pools.
+       Nu (i,j,kp) = Nu (i,j,kp) + dNu
+       Nm (i,j,kp) = Nm (i,j,kp) + dNm
+       Nv (i,j,kp) = Nv (i,j,kp) + dNv
+       Nn (i,j,kp) = Nn (i,j,kp) + dNn
+       Na (i,j,kp) = Na (i,j,kp) + dNa
+       Ns (i,j,kp) = Ns (i,j,kp) + dNs
+       Npa (i,j,kp) = Npa (i,j,kp) + dNpa
+       ! Total soil C (kg[C] m-2).
+       soilC (i,j,kp) = Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + &
+                        Cn (i,j,kp) + Ca (i,j,kp) + Cs (i,j,kp) + &
+			Cpa (i,j,kp)
+       soilN (i,j,kp) = Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + &
+                        Nn (i,j,kp) + Na (i,j,kp) + Ns (i,j,kp) + &
+			Npa (i,j,kp)
+       ! N mineralization rate (kg[N] m-2 day-1).
+       Nmin = N0 - soilN (i,j,kp)
+       ! Production rate of plant-available N (kg[N] m-2 day-1).
+       U = (one - emf) * (Nmin + Nad + Nfx + Ndepo)
+       ! Soil respiration (kg[C] m-2 day-1).
+       sresp = C0 - (soilC (i,j,kp) + dCle)
+       snmin (i,j,kp) = snmin (i,j,kp) + U
+       write (*,*) it/4,Cpa(i,j,1),et_soil,em_soil,ev
       end do
-     end if ! 
+     end if ! (mod (it, 4) == zero)
     end do ! it = 1, ntimes
 !    stop
    end if ! tmp (i,j,k) /= fillvalue
