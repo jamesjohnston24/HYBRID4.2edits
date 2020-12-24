@@ -57,6 +57,8 @@ integer, parameter :: nlon = 720
 integer, parameter :: nlat = 360
 integer, parameter :: ntimes = 1460
 integer, parameter :: nplots = 10
+integer, parameter :: nind_max = 100
+real, parameter :: dt = 6.0 * 60. * 60.0 ! s timestep-1
 real, parameter :: fillvalue = 1.0e20
 real, parameter :: tf = 273.15
 real, parameter :: eps = 1.0e-8
@@ -68,6 +70,17 @@ real, parameter :: m_air = 28.9647
 real, parameter :: m_water = 18.01528
 real, parameter :: pi = 3.14159265359
 real, parameter :: iscv = 0.2 ! Range of initial soil C (+/-fraction)
+real, parameter :: area = 200.0 ! Plot area (m2)
+real, parameter :: Tc_local = 0.3 ! Clay fraction?
+real, parameter :: Ts_local = 0.3 ! Sand fraction?
+real, parameter :: plf = 0.01 + 0.04 * Ts_local
+! Biomass C content (fraction).
+real, parameter :: w = 0.45
+! Lignin to biomass ratio in leaf litter.
+real, parameter :: lfl = 0.20
+! Lignin to biomass ratio in root litter.
+real, parameter :: lrl = 0.16
+real, parameter :: texture = 0.5 ! Soil texture (units?)
 ! N:C ratio of surface structural litter.
 real, parameter :: vu =  1.0 / 150.0
 ! N:C ratio of soil structural litter.
@@ -78,16 +91,7 @@ real, parameter :: va =  1.0 /  15.0
 real, parameter :: vs =  1.0 /  20.0
 ! N:C ratio of soil passive organic matter pool.
 real, parameter :: vpa = 1.0 / 10.0
-real, parameter :: area = 200.0 ! Plot area (m2)
-real, parameter :: texture = 0.5 ! Soil texture (units?).
-real, parameter :: Ts_local = 0.3 ! Sand fraction?
-real, parameter :: plf = 0.01 + 0.04 * Ts_local
-! Biomass C content (fration).
-real, parameter :: w = 0.45
-! Lignin to biomass ratio in leaf litter.
-real, parameter :: lfl = 0.20
-! Lignin to biomass ratio in root litter.
-real, parameter :: lrl = 0.16
+real, parameter :: emf = 0.05 ! N emission (fraction).
 ! Partition coefficients.
 real, parameter :: pau = 0.55 * (one - lfl)
 real, parameter :: psu = 0.7 * lfl
@@ -95,18 +99,20 @@ real, parameter :: pav = 0.45 * (one - lfl)
 real, parameter :: psv = 0.7 * lfl
 real, parameter :: pam = 0.45
 real, parameter :: pan = 0.45
-real, parameter :: psab = 0.486
+real, parameter :: psab = 0.996 - (0.85 - 0.68 * texture)
 real, parameter :: ppa = 0.004
 real, parameter :: pas = 0.42
 real, parameter :: pps = 0.03
 real, parameter :: pap = 0.45
 ! Decay rates base values from Comins & McMurtrie (1993), but
 ! doubled to allow for inclusion of the soil water factor (/day).
-real, parameter :: d2pb = 2.0 * 0.28    / 7.0
-real, parameter :: d4pb = 2.0 * 0.35    / 7.0
-real, parameter :: d6pb = 2.0 * 0.0038  / 7.0
-real, parameter :: d7pb = 2.0 * 0.00013 / 7.0
-real, parameter :: emf = 0.05 ! N emission (fraction).
+real, parameter :: d1pb = 2.0 * 0.076 * exp (-3.0 * lfl)      / 7.0
+real, parameter :: d2pb = 2.0 * 0.28                          / 7.0
+real, parameter :: d3pb = 2.0 * 0.094 * exp (-3.0 * lrl)      / 7.0
+real, parameter :: d4pb = 2.0 * 0.35                          / 7.0
+real, parameter :: d5pb = 2.0 * 0.14 * (one - 0.75 * texture) / 7.0
+real, parameter :: d6pb = 2.0 * 0.0038                        / 7.0
+real, parameter :: d7pb = 2.0 * 0.00013                       / 7.0
 real, parameter :: Nad = 0.0 ! N addition (kg[N] m-2 day-1).
 real, parameter :: nfx = 0.0 ! N fixation (kg[N] m-2 day-1).
 ! Pre-industrial N deposition at 0 m ppt (kg[N] ha-2 yr-1 ->
@@ -127,6 +133,7 @@ integer :: varid_Nm,varid_Nu,varid_Nn,varid_Nv,varid_Na,varid_Ns,varid_Npa
 integer :: varid_snmin
 integer :: varid_nind
 integer :: varid_soilw1,varid_soilw2,varid_soilw3
+integer :: varid_cfoliage
 integer :: ncid
 integer :: lon_dimid
 integer :: lat_dimid
@@ -146,6 +153,7 @@ integer, allocatable, dimension (:) :: plot ! No. of plot
 real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water fraction
 real, allocatable, dimension (:,:) :: icwtr ! Ice/water fraction
 real, allocatable, dimension (:,:,:) :: tmp ! K
+real, allocatable, dimension (:,:,:) :: dswrf ! J m-2
 real, allocatable, dimension (:,:,:) :: pre ! mm 6hr-1
 real, allocatable, dimension (:,:,:) :: spfh ! kg kg-1
 real, allocatable, dimension (:,:,:) :: pres ! Pa
@@ -181,6 +189,8 @@ real, allocatable, dimension (:,:,:) :: soilw3
 real, allocatable, dimension (:,:,:) :: swc1
 real, allocatable, dimension (:,:,:) :: swc2
 real, allocatable, dimension (:,:,:) :: swc3
+real, allocatable, dimension (:,:,:,:) :: isfact
+real, allocatable, dimension (:,:,:,:) :: cfoliage
 real, allocatable, dimension (:) :: wlittc
 real, allocatable, dimension (:) :: wlittn
 real, allocatable, dimension (:) :: flittc
@@ -193,11 +203,12 @@ real :: eo ! Penman evaporation from lake (mm day-1)
 real :: pt ! Annual precipiation (m yr-1)
 real :: vap ! Vapour pressure (Pa)
 real :: e ! Vapour pressure (mbar)
+real :: radsw ! 
 real :: isc_total ! Total global soil C (Pg[C])
 real :: ran ! Random number (0-1)
 real :: Noise ! Noise on initial soil C (ratio)
-real :: vm ! N:C ratio of surface metabolic litter
-real :: vn ! N:C ratio of soil metabolic litter
+real :: vm = 0.07 ! N:C ratio of surface metabolic litter
+real :: vn = 0.07 ! N:C ratio of soil metabolic litter
 real :: tsoil ! Soil temperature (oC)
 real :: et_soil ! Soil decomposition temperature modifier (fraction)
 real :: em_soil ! Soil decomposition water modifer (fraction)
@@ -217,7 +228,6 @@ real :: puf
 real :: pnr
 real :: pvr
 real :: psa
-real :: d1pb,d3pb,d5pb
 real :: d1p,d2p,d3p,d4p,d5p,d6p,d7p
 real :: d1C,d2C,d3C,d4C,d5C,d6C,d7C
 real :: dCu,dCm,dCv,dCn,dCa,dCs,dCpa,dCle
@@ -226,6 +236,7 @@ real :: NmfNmw,Nnr
 real :: dNu,dNm,dNv,dNn,dNa,dNs,dNpa
 real :: temp,C0,N0,Cleach,Nmin,U,Ndepo,nf
 real :: sresp ! Soil respiration (kg[C] m-1 day-1)
+real :: st ! SW radiation absorbed in upper crown layer (W m-2)
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -240,8 +251,9 @@ allocate (isc  (nlon,nlat))
 allocate (isc_grid  (nlon,nlat))
 allocate (larea_qd (2*nlon,2*nlat))
 allocate (larea (nlon,nlat))
-allocate (tmp  (nlon,nlat,ntimes))
-allocate (pre  (nlon,nlat,ntimes))
+allocate (tmp   (nlon,nlat,ntimes))
+allocate (dswrf (nlon,nlat,ntimes))
+allocate (pre   (nlon,nlat,ntimes))
 allocate (spfh (nlon,nlat,ntimes))
 allocate (pres (nlon,nlat,ntimes))
 allocate (Cm   (nlon,nlat,nplots))
@@ -269,6 +281,8 @@ allocate (soilw3 (nlon,nlat,nplots))
 allocate (swc1 (nlon,nlat,nplots))
 allocate (swc2 (nlon,nlat,nplots))
 allocate (swc3 (nlon,nlat,nplots))
+allocate (isfact   (nlon,nlat,nplots,nind_max))
+allocate (cfoliage (nlon,nlat,nplots,nind_max))
 allocate (wlittc (nplots))
 allocate (wlittn (nplots))
 allocate (flittc (nplots))
@@ -295,6 +309,8 @@ nind (:,:,:) = 0
 soilw1 (:,:,:) = fillvalue
 soilw2 (:,:,:) = fillvalue
 soilw3 (:,:,:) = fillvalue
+isfact   (:,:,:,:) = zero
+cfoliage (:,:,:,:) = zero
 !----------------------------------------------------------------------!
 ! Read in ice/water fractions for each grid-box, and areas (km2).
 ! Water is ocean and freshwater bodies from map.
@@ -335,6 +351,8 @@ if (local) then
  if (lat_w == (64.0 + 21.0 / 60.0)) open (20,file='uggla.clm',&
   status='unknown')
  if (lat_w == 68.25) open (20,file='grudd.clm',status='unknown')
+ !---------------------------------------------------------------------!
+ open (21,file='soil.txt',status='unknown')
  !---------------------------------------------------------------------!
  i1 = i_w
  i2 = i_w
@@ -397,6 +415,8 @@ if (rsf_in) then
  call check (nf90_get_var (ncid, varid, soilw2))
  varid = 22
  call check (nf90_get_var (ncid, varid, soilw3))
+ varid = 23
+ call check (nf90_get_var (ncid, varid, cfoliage))
  call check (nf90_close (ncid))
 else
  do kp = 1, nplots
@@ -412,7 +432,8 @@ eyr = 1901
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-if (.NOT. (rsf_in)) then ! Set soil C, N, water; plot nind.
+if (.NOT. (rsf_in)) then
+! Set soil C, N, water; plot nind; cfoliage.
 do kyr = syr, syr
 
  !---------------------------------------------------------------------!
@@ -611,6 +632,14 @@ do kyr = syr, syr
       !----------------------------------------------------------------!
       nind (i, j, kp) = 3
       !----------------------------------------------------------------!
+      do ki = 1, nind (i, j, kp)
+       !---------------------------------------------------------------!
+       ! Foliage C of each individual (kg[C] ind-1).
+       !---------------------------------------------------------------!
+       cfoliage (i, j, kp, ki) = 1.0
+       !---------------------------------------------------------------!
+      end do
+      !----------------------------------------------------------------!
       ! Soil water (m).
       !----------------------------------------------------------------!
       soilw1 (i, j, kp) = 0.1
@@ -737,6 +766,22 @@ do kyr = syr, eyr
  !---------------------------------------------------------------------!
 
  !---------------------------------------------------------------------!
+ ! Read global downward solar radiation flux fields for year kyr into
+ ! dswrf (J m-2).
+ !---------------------------------------------------------------------!
+ var_name = 'dswrf'
+ file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+ &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
+ &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
+ write (*,*) 'Reading from ',trim(file_name)
+ call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
+ ! Read solar radation (J m-2).
+ varid = 4
+ call check (nf90_get_var (ncid, varid, dswrf))
+ call check (nf90_close (ncid))
+ !---------------------------------------------------------------------!
+
+ !---------------------------------------------------------------------!
  nland = 0
  do j = j1, j2
   do i = i1, i2
@@ -744,8 +789,22 @@ do kyr = syr, eyr
    if (tmp (i, j, 1) /= fillvalue) then
     nland = nland + 1
     do it = 1, ntimes
+     !-----------------------------------------------------------------!
+     ! Downwelling solar radiation (W m-2).
+     !-----------------------------------------------------------------!
+     radsw = dswrf (i,j,it) / dt
+     !-----------------------------------------------------------------!
+     do kp = 1, nplots
+      do ki = 1, nind (i,j,kp)
+       !---------------------------------------------------------------!
+       ! SW radiation absorbed in upper crown layer (W m-2).
+       !---------------------------------------------------------------!
+       st = radsw * isfact (i,j,kp,ki)
+       !---------------------------------------------------------------!
+      end do
+     end do
      !****adf
-     outflow = 0.0 ! Daily outflow (m).
+     outflow = 0.001 ! Daily outflow (m).
      !****adf
      ! End of day?
      if (mod (it, 4) == zero) then
@@ -762,12 +821,25 @@ do kyr = syr, eyr
        rlittn (kp) = zero
        do ki = 1, nind (i, j, kp)
         !****adf
-        wlitterc = 0.0
-        wlittern = 0.0
-        flitterc = 0.0
-        flittern = 0.0
-        rlitterc = 0.0
-        rlittern = 0.0
+	if (ki == 3) then
+	 ! Assume woody mass is 5 kg[C] m-2, 10% annual turnover;
+	 ! 2% N in foliage and fine roots; 1% N in wood.
+	 ! LAI is 3.0. sla is 36 m2 kg[C]-1. Cold deciduous.
+	 ! Fine root and foliage equal.
+         wlitterc = area * 0.1 * 5.0 / 365.0
+         wlittern = 2.0 * 0.01 * wlitterc
+         flitterc = (area * 3.0 / 36.0) / 365.0
+         flittern = 2.0 * 0.02 * flitterc
+         rlitterc = flitterc
+         rlittern = flittern
+	else
+	 wlitterc = zero
+	 wlittern = zero
+	 flitterc = zero
+	 flittern = zero
+	 rlitterc = zero
+	 rlittern = zero
+	end if
         !****adf
         wlittc (kp) = wlittc (kp) + wlitterc
         wlittn (kp) = wlittn (kp) + wlittern
@@ -797,14 +869,6 @@ do kyr = syr, eyr
        rlittc (kp) = rlittc (kp) / area
        rlittn (kp) = rlittn (kp) / area
        !---------------------------------------------------------------!
-       ! Decay rates base values (/day). Taken from Comins &
-       ! McMurtrie (1993), but doubled to allow for inclusion of the
-       ! soil water factor.
-       !---------------------------------------------------------------!
-       d1pb = 2.0 * 0.076 * exp (-3.0 * lfl) / 7.0
-       d3pb = 2.0 * 0.094 * exp (-3.0 * lrl) / 7.0
-       d5pb = 2.0 * 0.14 * (one - 0.75 * texture)  / 7.0
-       !---------------------------------------------------------------!
        ! Soil water holding capacity (Eqn. (1) of FW00; m).
        !---------------------------------------------------------------!
        swct (i,j,kp) = 0.213 + 0.00227 * soilC (i, j, kp)
@@ -831,24 +895,33 @@ do kyr = syr, eyr
        ! Convert soil water to water-filled pore space.
        ! Assumes micro-pore space = swc and macro-pore space = 42%
        ! saturation content (from TEM, for loam; Raich et al., 1991).
+       !---------------------------------------------------------------!
        if (swct (i,j,kp) > eps) then
         wfps = 100.0 * (soilw1 (i, j, kp) + soilw2 (i, j, kp) + &
                         soilw3 (i, j, kp)) / (1.7241 * swct (i,j,kp))
+	wfps = min (100.0, wfps)
        else
         wfps = 0.00001
        end if
+       !---------------------------------------------------------------!
        ! Soil-water decomposition modifer (fraction). Equations are 
        ! fitted to Fig. 8 of Williams et al. (1992).
+       !---------------------------------------------------------------!
        if (wfps < 60.0) then
         em_soil = exp ((wfps - 60.0) ** 2 / (-800.0))
        else
         em_soil = 0.000371 * wfps ** 2 - 0.0748 * wfps + 4.13
        endif
+       !---------------------------------------------------------------!
        em_soil = max (zero, em_soil)
        em_soil = min (one , em_soil)
+       !---------------------------------------------------------------!
        ! Overall decomposition modifier.
+       !---------------------------------------------------------------!
        ev = et_soil * em_soil
+       !---------------------------------------------------------------!
        ! Soil microbe leach fraction.
+       !---------------------------------------------------------------!
        h2o_30 = outflow
        pleach = 0.05555 * h2o_30 * plf
        ! Partitioning coefficients.
@@ -954,12 +1027,19 @@ do kyr = syr, eyr
             Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + Nn (i,j,kp) + &
             Na (i,j,kp) + Ns (i,j,kp) + Npa (i,j,kp)
        ! Update C pools.
+       ! Surface structural litter.
        Cu (i,j,kp) = Cu (i,j,kp) + dCu
+       ! Surface metabolic litter.
        Cm (i,j,kp) = Cm (i,j,kp) + dCm
+       ! Soil structural litter.
        Cv (i,j,kp) = Cv (i,j,kp) + dCv
+       ! Soil metabolic litter.
        Cn (i,j,kp) = Cn (i,j,kp) + dCn
+       ! Active.
        Ca (i,j,kp) = Ca (i,j,kp) + dCa
+       ! Slow.
        Cs (i,j,kp) = Cs (i,j,kp) + dCs
+       ! Passive.
        Cpa (i,j,kp) = Cpa (i,j,kp) + dCpa
        ! Following does not appear to be used.
        Cleach = dCle
@@ -985,8 +1065,26 @@ do kyr = syr, eyr
        ! Soil respiration (kg[C] m-2 day-1).
        sresp = C0 - (soilC (i,j,kp) + dCle)
        snmin (i,j,kp) = snmin (i,j,kp) + U
-       write (*,*) it/4,Cpa(i,j,1),et_soil,em_soil,ev
       end do
+      if (local) then
+       kp = 1
+       !write (*,*) 
+       write (*,*) kyr,it/4,cfoliage(i,j,1,1)
+       !write (*,'(2i5,9f8.4)') kyr,it/4,Cu(i,j,kp),Cm(i,j,kp),&
+       !                     Cv(i,j,kp), &
+       !                     Cn(i,j,kp),Ca(i,j,kp),Cs(i,j,kp),Cpa(i,j,kp),&
+       !		    soilC(i,j,kp),1.0e3*sresp
+       write (21,'(2i5,9f8.4)') kyr,it/4,Cu(i,j,kp),Cm(i,j,kp),&
+                            Cv(i,j,kp), &
+                            Cn(i,j,kp),Ca(i,j,kp),Cs(i,j,kp),Cpa(i,j,kp),&
+			    soilC(i,j,kp),1.0e3*sresp
+       !write (*,'(2i5,8f8.4)') kyr,it/4,Nu(i,j,kp),Nm(i,j,kp),&
+       !                     Nv(i,j,kp), &
+       !                     Nn(i,j,kp),Na(i,j,kp),Ns(i,j,kp),Npa(i,j,kp),&
+       !		    soilN(i,j,kp)
+       !write (*,*) kyr,it/4,1.0e3*snmin(i,j,kp),&
+       !    soilN(i,j,kp)/soilC(i,j,kp),soilC(i,j,kp)/soilN(i,j,kp)
+      end if
      end if ! (mod (it, 4) == zero)
     end do ! it = 1, ntimes
 !    stop
@@ -997,116 +1095,124 @@ do kyr = syr, eyr
 end do ! kyr = syr, eyr
 !----------------------------------------------------------------------!
 
+!----------------------------------------------------------------------!
 ! Output state variables to restart file if required.
+!----------------------------------------------------------------------!
 if (rsf_out) then
-   file_name = "/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_out.nc"
-   write (*, *) 'Writing to ', trim (file_name)
-   ! Create netCDF dataset and enter define mode.
-   call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
-               ncid = ncid))
-   ! Define the dimensions.
-   call check (nf90_def_dim (ncid, "longitude", nlon  , lon_dimid))
-   call check (nf90_def_dim (ncid, "latitude" , nlat  , lat_dimid))
-   call check (nf90_def_dim (ncid, "plot"     , nplots, plot_dimid))
-   ! Define coordinate variables.
-   call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
-               lon_varid))
-   call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
-               lat_varid))
-   call check (nf90_def_var (ncid, "plot"     , nf90_int  , plot_dimid, &
-               plot_varid))
-   dimids_three = (/ lon_dimid, lat_dimid, plot_dimid /)
-   ! Assign units attributes to coordinate data.
-   call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
-   call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
-   ! Define variables.
-   call check (nf90_def_var (ncid, "Surface_metabolic_organic_C", &
-    nf90_float, dimids_three, varid_Cm))
-   call check (nf90_def_var (ncid, "Surface_structural_organic_C", &
-    nf90_float, dimids_three, varid_Cu))
-   call check (nf90_def_var (ncid, "Soil_metabolic_organic_C", &
-    nf90_float, dimids_three, varid_Cn))
-   call check (nf90_def_var (ncid, "Soil_structural_organic_C", &
-    nf90_float, dimids_three, varid_Cv))
-   call check (nf90_def_var (ncid, "Active_organic_C", &
-    nf90_float, dimids_three, varid_Ca))
-   call check (nf90_def_var (ncid, "Slow_organic_C", &
-    nf90_float, dimids_three, varid_Cs))
-   call check (nf90_def_var (ncid, "Passive_soil_organic_C", &
-    nf90_float, dimids_three, varid_Cpa))
-   call check (nf90_def_var (ncid, "Surface_metabolic_organic_N", &
-    nf90_float, dimids_three, varid_Nm))
-   call check (nf90_def_var (ncid, "Surface_structural_organic_N", &
-    nf90_float, dimids_three, varid_Nu))
-   call check (nf90_def_var (ncid, "Soil_metabolic_organic_N", &
-    nf90_float, dimids_three, varid_Nn))
-   call check (nf90_def_var (ncid, "Soil_structural_organic_N", &
-    nf90_float, dimids_three, varid_Nv))
-   call check (nf90_def_var (ncid, "Active_organic_N", &
-    nf90_float, dimids_three, varid_Na))
-   call check (nf90_def_var (ncid, "Slow_organic_N", &
-    nf90_float, dimids_three, varid_Ns))
-   call check (nf90_def_var (ncid, "Passive_soil_organic_N", &
-    nf90_float, dimids_three, varid_Npa))
-   call check (nf90_def_var (ncid, "Mineral_N", &
-    nf90_float, dimids_three, varid_snmin))
-   call check (nf90_def_var (ncid, "Number_individuals", &
-    nf90_int, dimids_three, varid_nind))
-   call check (nf90_def_var (ncid, "Soil_water_layer_1", &
-    nf90_float, dimids_three, varid_soilw1))
-   call check (nf90_def_var (ncid, "Soil_water_layer_2", &
-    nf90_float, dimids_three, varid_soilw2))
-   call check (nf90_def_var (ncid, "Soil_water_layer_3", &
-    nf90_float, dimids_three, varid_soilw3))
-   call check (nf90_put_att (ncid, varid_Cm , "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Cu , "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Cn , "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Cv , "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Ca , "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Cs , "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Cpa, "units", "kg[C] m-2"))
-   call check (nf90_put_att (ncid, varid_Nm , "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_Nu , "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_Nn , "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_Nv , "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_Na , "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_Ns , "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_Npa, "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_snmin, "units", "kg[N] m-2"))
-   call check (nf90_put_att (ncid, varid_nind, "units", "n"))
-   call check (nf90_put_att (ncid, varid_soilw1, "units", "m"))
-   call check (nf90_put_att (ncid, varid_soilw2, "units", "m"))
-   call check (nf90_put_att (ncid, varid_soilw3, "units", "m"))
-   ! End definitions.
-   call check (nf90_enddef (ncid))
-   ! Write data.
-   call check (nf90_put_var (ncid, lon_varid, lon))
-   call check (nf90_put_var (ncid, lat_varid, lat))
-   call check (nf90_put_var (ncid, plot_varid, plot))
-   call check (nf90_put_var (ncid, varid_Cm , Cm))
-   call check (nf90_put_var (ncid, varid_Cu , Cu))
-   call check (nf90_put_var (ncid, varid_Cn , Cn))
-   call check (nf90_put_var (ncid, varid_Cv , Cv))
-   call check (nf90_put_var (ncid, varid_Ca , Ca))
-   call check (nf90_put_var (ncid, varid_Cs , Cs))
-   call check (nf90_put_var (ncid, varid_Cpa, Cpa))
-   call check (nf90_put_var (ncid, varid_Nm , Nm))
-   call check (nf90_put_var (ncid, varid_Nu , Nu))
-   call check (nf90_put_var (ncid, varid_Nn , Nn))
-   call check (nf90_put_var (ncid, varid_Nv , Nv))
-   call check (nf90_put_var (ncid, varid_Na , Na))
-   call check (nf90_put_var (ncid, varid_Ns , Ns))
-   call check (nf90_put_var (ncid, varid_Npa, Npa))
-   call check (nf90_put_var (ncid, varid_snmin, snmin))
-   call check (nf90_put_var (ncid, varid_nind, nind))
-   call check (nf90_put_var (ncid, varid_soilw1, soilw1))
-   call check (nf90_put_var (ncid, varid_soilw2, soilw2))
-   call check (nf90_put_var (ncid, varid_soilw3, soilw3))
-   ! Close file.
-   call check (nf90_close (ncid))
+ file_name = &
+            "/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_out.nc"
+  write (*, *) 'Writing to ', trim (file_name)
+  ! Create netCDF dataset and enter define mode.
+  call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+              ncid = ncid))
+  ! Define the dimensions.
+  call check (nf90_def_dim (ncid, "longitude", nlon  , lon_dimid))
+  call check (nf90_def_dim (ncid, "latitude" , nlat  , lat_dimid))
+  call check (nf90_def_dim (ncid, "plot"     , nplots, plot_dimid))
+  ! Define coordinate variables.
+  call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
+              lon_varid))
+  call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
+              lat_varid))
+  call check (nf90_def_var (ncid, "plot"     , nf90_int  , plot_dimid, &
+              plot_varid))
+  dimids_three = (/ lon_dimid, lat_dimid, plot_dimid /)
+  ! Assign units attributes to coordinate data.
+  call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
+  call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+  ! Define variables.
+  call check (nf90_def_var (ncid, "Surface_metabolic_organic_C", &
+   nf90_float, dimids_three, varid_Cm))
+  call check (nf90_def_var (ncid, "Surface_structural_organic_C", &
+   nf90_float, dimids_three, varid_Cu))
+  call check (nf90_def_var (ncid, "Soil_metabolic_organic_C", &
+   nf90_float, dimids_three, varid_Cn))
+  call check (nf90_def_var (ncid, "Soil_structural_organic_C", &
+   nf90_float, dimids_three, varid_Cv))
+  call check (nf90_def_var (ncid, "Active_organic_C", &
+   nf90_float, dimids_three, varid_Ca))
+  call check (nf90_def_var (ncid, "Slow_organic_C", &
+   nf90_float, dimids_three, varid_Cs))
+  call check (nf90_def_var (ncid, "Passive_soil_organic_C", &
+   nf90_float, dimids_three, varid_Cpa))
+  call check (nf90_def_var (ncid, "Surface_metabolic_organic_N", &
+   nf90_float, dimids_three, varid_Nm))
+  call check (nf90_def_var (ncid, "Surface_structural_organic_N", &
+   nf90_float, dimids_three, varid_Nu))
+  call check (nf90_def_var (ncid, "Soil_metabolic_organic_N", &
+   nf90_float, dimids_three, varid_Nn))
+  call check (nf90_def_var (ncid, "Soil_structural_organic_N", &
+   nf90_float, dimids_three, varid_Nv))
+  call check (nf90_def_var (ncid, "Active_organic_N", &
+   nf90_float, dimids_three, varid_Na))
+  call check (nf90_def_var (ncid, "Slow_organic_N", &
+   nf90_float, dimids_three, varid_Ns))
+  call check (nf90_def_var (ncid, "Passive_soil_organic_N", &
+   nf90_float, dimids_three, varid_Npa))
+  call check (nf90_def_var (ncid, "Mineral_N", &
+   nf90_float, dimids_three, varid_snmin))
+  call check (nf90_def_var (ncid, "Number_individuals", &
+   nf90_int, dimids_three, varid_nind))
+  call check (nf90_def_var (ncid, "Soil_water_layer_1", &
+   nf90_float, dimids_three, varid_soilw1))
+  call check (nf90_def_var (ncid, "Soil_water_layer_2", &
+   nf90_float, dimids_three, varid_soilw2))
+  call check (nf90_def_var (ncid, "Soil_water_layer_3", &
+   nf90_float, dimids_three, varid_soilw3))
+  call check (nf90_def_var (ncid, "Foliage_C", &
+   nf90_float, dimids_three, varid_cfoliage))
+  call check (nf90_put_att (ncid, varid_Cm , "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Cu , "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Cn , "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Cv , "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Ca , "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Cs , "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Cpa, "units", "kg[C] m-2"))
+  call check (nf90_put_att (ncid, varid_Nm , "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_Nu , "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_Nn , "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_Nv , "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_Na , "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_Ns , "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_Npa, "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_snmin, "units", "kg[N] m-2"))
+  call check (nf90_put_att (ncid, varid_nind, "units", "n"))
+  call check (nf90_put_att (ncid, varid_soilw1, "units", "m"))
+  call check (nf90_put_att (ncid, varid_soilw2, "units", "m"))
+  call check (nf90_put_att (ncid, varid_soilw3, "units", "m"))
+  call check (nf90_put_att (ncid, varid_cfoliage, "units", "kg[C} ind-1"))
+  ! End definitions.
+  call check (nf90_enddef (ncid))
+  ! Write data.
+  call check (nf90_put_var (ncid, lon_varid, lon))
+  call check (nf90_put_var (ncid, lat_varid, lat))
+  call check (nf90_put_var (ncid, plot_varid, plot))
+  call check (nf90_put_var (ncid, varid_Cm , Cm))
+  call check (nf90_put_var (ncid, varid_Cu , Cu))
+  call check (nf90_put_var (ncid, varid_Cn , Cn))
+  call check (nf90_put_var (ncid, varid_Cv , Cv))
+  call check (nf90_put_var (ncid, varid_Ca , Ca))
+  call check (nf90_put_var (ncid, varid_Cs , Cs))
+  call check (nf90_put_var (ncid, varid_Cpa, Cpa))
+  call check (nf90_put_var (ncid, varid_Nm , Nm))
+  call check (nf90_put_var (ncid, varid_Nu , Nu))
+  call check (nf90_put_var (ncid, varid_Nn , Nn))
+  call check (nf90_put_var (ncid, varid_Nv , Nv))
+  call check (nf90_put_var (ncid, varid_Na , Na))
+  call check (nf90_put_var (ncid, varid_Ns , Ns))
+  call check (nf90_put_var (ncid, varid_Npa, Npa))
+  call check (nf90_put_var (ncid, varid_snmin, snmin))
+  call check (nf90_put_var (ncid, varid_nind, nind))
+  call check (nf90_put_var (ncid, varid_soilw1, soilw1))
+  call check (nf90_put_var (ncid, varid_soilw2, soilw2))
+  call check (nf90_put_var (ncid, varid_soilw3, soilw3))
+  call check (nf90_put_var (ncid, varid_cfoliage, cfoliage))
+  ! Close file.
+  call check (nf90_close (ncid))
 end if
 
 if ((local) .and. (wrclim)) close (20) ! Local climate output.
+if (local) close (21)
 
 !----------------------------------------------------------------------!
 write (*,*) 'nland = ', nland
