@@ -53,11 +53,13 @@ logical, parameter :: rsf_in = .TRUE.
 ! Write to restart file?
 logical, parameter :: rsf_out = .FALSE.
 !logical, parameter :: rsf_out = .TRUE.
-integer, parameter :: nlon = 720
-integer, parameter :: nlat = 360
-integer, parameter :: ntimes = 1460
-integer, parameter :: nplots = 10
-integer, parameter :: nind_max = 100
+integer, parameter :: nlon     =  720
+integer, parameter :: nlat     =  360
+integer, parameter :: ntimes   = 1460
+integer, parameter :: nplots   =   10
+integer, parameter :: nind_max =  100
+integer, parameter :: nspp     =    4
+integer, parameter :: mh       =  110
 real, parameter :: dt = 6.0 * 60. * 60.0 ! s timestep-1
 real, parameter :: fillvalue = 1.0e20
 real, parameter :: tf = 273.15
@@ -71,9 +73,16 @@ real, parameter :: m_water = 18.01528
 real, parameter :: pi = 3.14159265359
 real, parameter :: iscv = 0.2 ! Range of initial soil C (+/-fraction)
 real, parameter :: area = 200.0 ! Plot area (m2)
+!                                   C3GR C4GR BRCD NLEV
+real, dimension (nspp) :: rhos  = (/0.20,0.20,  0.20,  0.11/)
+real, dimension (nspp) :: ksw   = (/0.48,0.48,  0.48,  0.37/)
+real, dimension (nspp) :: lsave = (/0.00,0.00,4167.0,3333.0/)
+real, dimension (nspp) :: sla   = (/36.0,36.0,  36.0,  12.0/)
 real, parameter :: Tc_local = 0.3 ! Clay fraction?
 real, parameter :: Ts_local = 0.3 ! Sand fraction?
 real, parameter :: plf = 0.01 + 0.04 * Ts_local
+real, parameter :: swpmax = -0.033 ! MPa
+real, parameter :: bsoil = 5.0
 ! Biomass C content (fraction).
 real, parameter :: w = 0.45
 ! Lignin to biomass ratio in leaf litter.
@@ -133,21 +142,22 @@ integer :: varid_Nm,varid_Nu,varid_Nn,varid_Nv,varid_Na,varid_Ns,varid_Npa
 integer :: varid_snmin
 integer :: varid_nind
 integer :: varid_soilw1,varid_soilw2,varid_soilw3
+integer :: varid_kspp
 integer :: varid_cfoliage
+integer :: varid_lasa
 integer :: ncid
-integer :: lon_dimid
-integer :: lat_dimid
-integer :: plot_dimid
-integer :: lon_varid
-integer :: lat_varid
-integer :: plot_varid
+integer :: lon_dimid, lat_dimid, plot_dimid, ind_dimid
+integer :: lon_varid, lat_varid, plot_varid, ind_varid
 integer, dimension (2) :: dimids_two
 integer, dimension (3) :: dimids_three
+integer, dimension (4) :: dimids_four
 integer :: i,ii,i1,i2
 integer :: j,jj,j1,j2
 integer :: k
 integer :: kp
 integer :: ki
+integer :: ksp
+integer :: m
 integer :: nland
 integer, allocatable, dimension (:) :: plot ! No. of plot
 real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water fraction
@@ -186,11 +196,14 @@ real, allocatable, dimension (:,:,:) :: swct
 real, allocatable, dimension (:,:,:) :: soilw1
 real, allocatable, dimension (:,:,:) :: soilw2
 real, allocatable, dimension (:,:,:) :: soilw3
-real, allocatable, dimension (:,:,:) :: swc1
-real, allocatable, dimension (:,:,:) :: swc2
-real, allocatable, dimension (:,:,:) :: swc3
-real, allocatable, dimension (:,:,:,:) :: isfact
-real, allocatable, dimension (:,:,:,:) :: cfoliage
+integer, allocatable, dimension (:,:,:,:) :: kspp
+real   , allocatable, dimension (:,:,:,:) :: cfoliage
+real   , allocatable, dimension (:,:,:,:) :: lasa
+real   , allocatable, dimension (:,:,:) :: swc1
+real   , allocatable, dimension (:,:,:) :: swc2
+real   , allocatable, dimension (:,:,:) :: swc3
+real   , allocatable, dimension (:,:,:,:) :: isfact
+integer, allocatable, dimension (:,:,:,:) :: height
 real, allocatable, dimension (:) :: wlittc
 real, allocatable, dimension (:) :: wlittn
 real, allocatable, dimension (:) :: flittc
@@ -237,6 +250,13 @@ real :: dNu,dNm,dNv,dNn,dNa,dNs,dNpa
 real :: temp,C0,N0,Cleach,Nmin,U,Ndepo,nf
 real :: sresp ! Soil respiration (kg[C] m-1 day-1)
 real :: st ! SW radiation absorbed in upper crown layer (W m-2)
+real, dimension (mh+1) :: fSWt
+real :: fst,fdt
+real :: swp1,swp2,swp3
+real :: sow1
+real :: sc1
+real :: sw1,sw2
+real :: tr_rat
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -278,11 +298,14 @@ allocate (swct   (nlon,nlat,nplots))
 allocate (soilw1 (nlon,nlat,nplots))
 allocate (soilw2 (nlon,nlat,nplots))
 allocate (soilw3 (nlon,nlat,nplots))
+allocate (kspp     (nlon,nlat,nplots,nind_max))
+allocate (cfoliage (nlon,nlat,nplots,nind_max))
+allocate (lasa     (nlon,nlat,nplots,nind_max))
 allocate (swc1 (nlon,nlat,nplots))
 allocate (swc2 (nlon,nlat,nplots))
 allocate (swc3 (nlon,nlat,nplots))
-allocate (isfact   (nlon,nlat,nplots,nind_max))
-allocate (cfoliage (nlon,nlat,nplots,nind_max))
+allocate (isfact (nlon,nlat,nplots,nind_max))
+allocate (height (nlon,nlat,nplots,nind_max))
 allocate (wlittc (nplots))
 allocate (wlittn (nplots))
 allocate (flittc (nplots))
@@ -309,8 +332,11 @@ nind (:,:,:) = 0
 soilw1 (:,:,:) = fillvalue
 soilw2 (:,:,:) = fillvalue
 soilw3 (:,:,:) = fillvalue
-isfact   (:,:,:,:) = zero
+kspp     (:,:,:,:) = zero
 cfoliage (:,:,:,:) = zero
+lasa     (:,:,:,:) = zero
+height   (:,:,:,:) = 0
+isfact   (:,:,:,:) = zero
 !----------------------------------------------------------------------!
 ! Read in ice/water fractions for each grid-box, and areas (km2).
 ! Water is ocean and freshwater bodies from map.
@@ -373,50 +399,54 @@ if (rsf_in) then
  call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
  varid = 1
  call check (nf90_get_var (ncid, varid, lon))
- varid = 2
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, lat))
- varid = 3
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, plot))
- varid = 4
+ varid = varid + 2
  call check (nf90_get_var (ncid, varid, Cm))
- varid = 5
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Cu))
- varid = 6
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Cn))
- varid = 7
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Cv))
- varid = 8
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Ca))
- varid = 9
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Cs))
- varid = 10
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Cpa))
- varid = 11
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Nm))
- varid = 12
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Nu))
- varid = 13
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Nn))
- varid = 14
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Nv))
- varid = 15
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Na))
- varid = 16
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Ns))
- varid = 17
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, Npa))
- varid = 18
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, snmin))
- varid = 19
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, nind))
- varid = 20
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, soilw1))
- varid = 21
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, soilw2))
- varid = 22
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, soilw3))
- varid = 23
+ varid = varid + 1
+ call check (nf90_get_var (ncid, varid, kspp))
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, cfoliage))
+ varid = varid + 1
+ call check (nf90_get_var (ncid, varid, lasa))
  call check (nf90_close (ncid))
 else
  do kp = 1, nplots
@@ -433,7 +463,7 @@ eyr = 1901
 
 !----------------------------------------------------------------------!
 if (.NOT. (rsf_in)) then
-! Set soil C, N, water; plot nind; cfoliage.
+! Set soil C, N, water; plot nind; cfoliage; lasa.
 do kyr = syr, syr
 
  !---------------------------------------------------------------------!
@@ -632,19 +662,58 @@ do kyr = syr, syr
       !----------------------------------------------------------------!
       nind (i, j, kp) = 3
       !----------------------------------------------------------------!
-      do ki = 1, nind (i, j, kp)
+      kspp (i,j,kp,1) = 1
+      kspp (i,j,kp,2) = 2
+      !****adf
+      kspp (i,j,kp,3) = 3
+      !****adf
+      !----------------------------------------------------------------!
+      do ki = 1, nind (i,j,kp)
+       !****adf
+       !---------------------------------------------------------------!
+       ksp = kspp (i,j,kp,ki)
+       !---------------------------------------------------------------!
+       ! Foliage area to sapwood area ratio (-).
+       !---------------------------------------------------------------!
+       lasa (i,j,kp,ki) = lsave (ksp)
        !---------------------------------------------------------------!
        ! Foliage C of each individual (kg[C] ind-1).
        !---------------------------------------------------------------!
-       cfoliage (i, j, kp, ki) = 1.0
+       cfoliage (i,j,kp,ki) = (area * 3.0 / sla (ksp)) / 3.0
        !---------------------------------------------------------------!
-      end do
+       !****adf
+      end do ! ki
+      !----------------------------------------------------------------!
+      ! Total soil C (kg[C] m-2).
+      !----------------------------------------------------------------!
+      soilC (i,j,kp) = Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + &
+                       Cn (i,j,kp) + Ca (i,j,kp) + Cs (i,j,kp) + &
+                       Cpa (i,j,kp)
+      !----------------------------------------------------------------!
+      ! Soil water holding capacities of layers (m).
+      ! d_one is max. swc of top layer for roots.
+      !----------------------------------------------------------------!
+      if (swct (i,j,kp) <= 0.05) then
+       swc1 (i,j,kp) = swct (i,j,kp)
+       swc2 (i,j,kp) = 0.0
+       swc3 (i,j,kp) = 0.0
+      else
+       if (swct (i,j,kp) <= d_one) then
+        swc1 (i,j,kp) = 0.05
+        swc2 (i,j,kp) = swct (i,j,kp) - 0.05
+        swc3 (i,j,kp) = 0.0
+       else
+        swc1 (i,j,kp) = 0.05
+        swc2 (i,j,kp) = d_one - 0.05
+        swc3 (i,j,kp) = swct (i,j,kp) - d_one
+       end if
+      end if
       !----------------------------------------------------------------!
       ! Soil water (m).
       !----------------------------------------------------------------!
-      soilw1 (i, j, kp) = 0.1
-      soilw2 (i, j, kp) = 0.1
-      soilw3 (i, j, kp) = 0.1
+      soilw1 (i,j,kp) = 0.5 * swc1 (i,j,kp)
+      soilw2 (i,j,kp) = 0.5 * swc2 (i,j,kp)
+      soilw3 (i,j,kp) = 0.5 * swc3 (i,j,kp)
       !----------------------------------------------------------------!
       if (local) write (*, *) kp, isc (i, j), Cm (i, j, kp), &
        Cv (i, j, kp), Cn (i, j, kp), Ca (i, j, kp), Cs (i, j, kp), &
@@ -724,7 +793,7 @@ do j = j1, j2
      swc2 (i,j,kp) = 0.0
      swc3 (i,j,kp) = 0.0
     else
-     if (swct (i,j,kp) <= d_one) THEN
+     if (swct (i,j,kp) <= d_one) then
        swc1 (i,j,kp) = 0.05
        swc2 (i,j,kp) = swct (i,j,kp) - 0.05
        swc3 (i,j,kp) = 0.0
@@ -734,10 +803,34 @@ do j = j1, j2
        swc3 (i,j,kp) = swct (i,j,kp) - d_one
      end if
     end if
-   end do
-  end if
- end do
-end do
+    do ki = 1, nind (i,j,kp)
+     ksp = kspp (i,j,kp,ki)
+     !****adf
+     !-----------------------------------------------------------------!
+     ! Plant height (m).
+     !-----------------------------------------------------------------!
+     height (i,j,kp,ki) = 1
+     !-----------------------------------------------------------------!
+     ! Fraction of SW radiation penetrating layer above (fraction).
+     !-----------------------------------------------------------------!
+     fSWt (mh+1) = 1.0
+     !-----------------------------------------------------------------!
+     do m = mh, 1, -1
+      fSWt (m) = 1.0
+     end do ! m
+     !-----------------------------------------------------------------!
+     !****adf
+     !-----------------------------------------------------------------!
+     ! Factor to calculate absorbed solar radiation.
+     !-----------------------------------------------------------------!
+     isfact (i,j,kp,ki) = (1.0 - rhos (ksp)) * &
+                           fSWt (height (i,j,kp,ki)) * ksw (ksp)
+     !-----------------------------------------------------------------!
+    end do ! ki
+   end do ! kp
+  end if ! tmp (i,j,1) /= fillvalue
+ end do ! i
+end do ! j
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -794,12 +887,92 @@ do kyr = syr, eyr
      !-----------------------------------------------------------------!
      radsw = dswrf (i,j,it) / dt
      !-----------------------------------------------------------------!
+     ! Soil temperature (oC).
+     !-----------------------------------------------------------------!
+     tsoil = sum (tmp (i,j,it-3:it)) / 4.0 - tf
+     !-----------------------------------------------------------------!
      do kp = 1, nplots
+      !----------------------------------------------------------------!
+      ! Soil water potentials (after Johnson et al., 1991) (MPa).
+      !----------------------------------------------------------------!
+      if (tsoil > zero) then
+       ! Soil water potential top-layer roots (MPa).
+       sow1 = soilw1 (i,j,kp) + soilw2 (i,j,kp)
+       sc1  = swc1   (i,j,kp) + swc2   (i,j,kp)
+       if (sow1 > eps) then
+        if (sc1 > eps) then
+         sw1 = swpmax * (1.0 / ((sow1 / sc1) ** bsoil))
+        else
+         sw1 = -100.0
+        end if
+       else
+        sw1 = -100.0
+       end if
+       !---------------------------------------------------------------!
+       ! Soil water potential for bottom-layer roots (MPa).
+       !---------------------------------------------------------------!
+       if (soilw3 (i,j,kp) > eps) then
+        if (swc3 (i,j,kp) > eps) then
+         sw2 = swpmax * (1.0 / ((soilw3 (i,j,kp) / &
+	       swc3 (i,j,kp)) ** bsoil))
+        else
+         sw2 = -100.0
+        end if
+       else
+        sw2 = -100.0
+       end if
+       !---------------------------------------------------------------!
+       ! Soil water potential for grass (MPa).
+       !---------------------------------------------------------------!
+       swp1 = sw1
+       !---------------------------------------------------------------!
+       ! Soil water potential for trees (MPa).
+       !---------------------------------------------------------------!
+       if (sw1 > sw2) then
+        ! All transpiration from top two layers.
+        swp2 = sw1
+	tr_rat = one
+       else
+        ! All transpiration from bottom layer.
+        swp2 = sw2
+	tr_rat = zero
+       end if
+       !---------------------------------------------------------------!
+      else
+       !---------------------------------------------------------------!
+       ! Soil frozen.
+       !---------------------------------------------------------------!
+       swp1 = -1.48
+       swp2 = -1.48
+       tr_rat = zero
+       !---------------------------------------------------------------!
+      end if ! tsoil > zero
+      !----------------------------------------------------------------!
       do ki = 1, nind (i,j,kp)
        !---------------------------------------------------------------!
        ! SW radiation absorbed in upper crown layer (W m-2).
        !---------------------------------------------------------------!
        st = radsw * isfact (i,j,kp,ki)
+       !---------------------------------------------------------------!
+       ! Stomatal conductance solar-radiation factor (fraction).
+       !---------------------------------------------------------------!
+       fst = 1.1044 * st / (st + 104.4)
+       !---------------------------------------------------------------!
+       ! Stomatal conductance soil-water factor (fraction).
+       !---------------------------------------------------------------!
+       if ((ki == 1) .or. (ki == 2)) then
+        ! Soil water factor for grass (fraction).
+        if (swp1 > (-1.5)) fdt = 1.155 + 0.77 * &
+	 (swp1 - 0.015 * height (i,j,kp,ki))
+         if (swp1 >  (-0.2)) fdt = one
+         if (swp1 <= (-1.5)) fdt = zero
+       else
+        if (swp2 > (-1.5)) fdt = 1.155 + 0.77 * &
+	 (swp2 - (lsave (ksp) / lasa (i,j,kp,ki)) * 0.005 * &
+	 height (i,j,kp,ki) - 0.01 * height (i,j,kp,ki))
+        if (swp2 >  (-0.2)) fdt = one
+        if (swp2 <= (-1.5)) fdt = zero
+       end if
        !---------------------------------------------------------------!
       end do
      end do
@@ -819,28 +992,24 @@ do kyr = syr, eyr
        flittn (kp) = zero
        rlittc (kp) = zero
        rlittn (kp) = zero
-       do ki = 1, nind (i, j, kp)
+       do ki = 1, nind (i,j,kp)
         !****adf
-	if (ki == 3) then
-	 ! Assume woody mass is 5 kg[C] m-2, 10% annual turnover;
-	 ! 2% N in foliage and fine roots; 1% N in wood.
-	 ! LAI is 3.0. sla is 36 m2 kg[C]-1. Cold deciduous.
-	 ! Fine root and foliage equal.
+	! Assume woody mass is 5 kg[C] m-2, 10% annual turnover;
+	! 2% N in foliage and fine roots; 1% N in wood.
+	! Fine root and foliage equal.
+	ksp = kspp (i,j,kp,ki)
+	if (ksp >= 3) then
          wlitterc = area * 0.1 * 5.0 / 365.0
          wlittern = 2.0 * 0.01 * wlitterc
-         flitterc = (area * 3.0 / 36.0) / 365.0
-         flittern = 2.0 * 0.02 * flitterc
-         rlitterc = flitterc
-         rlittern = flittern
 	else
 	 wlitterc = zero
 	 wlittern = zero
-	 flitterc = zero
-	 flittern = zero
-	 rlitterc = zero
-	 rlittern = zero
 	end if
-        !****adf
+        flitterc = cfoliage (i,j,kp,ki) / 365.0
+        flittern = 2.0 * 0.02 * flitterc
+        rlitterc = flitterc
+        rlittern = flittern
+	!****adf
         wlittc (kp) = wlittc (kp) + wlitterc
         wlittn (kp) = wlittn (kp) + wlittern
         flittc (kp) = flittc (kp) + flitterc
@@ -851,7 +1020,6 @@ do kyr = syr, eyr
       end do
       ! et_soil is cited in F97 as from Comins & McMurtrie (1993).
       ! Equation from HYBRID4 code.
-      tsoil = sum (tmp (i, j, it-3:it)) / 4.0 - tf
       if (tsoil > eps) then
        et_soil = 0.0326 + 0.00351 * tsoil ** 1.652 - &
                 (0.023953 * tsoil) ** 7.19
@@ -1102,25 +1270,43 @@ if (rsf_out) then
  file_name = &
             "/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_out.nc"
   write (*, *) 'Writing to ', trim (file_name)
+  !--------------------------------------------------------------------!
   ! Create netCDF dataset and enter define mode.
-  call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+  ! nf90_64bit_offset required because file is large. Found rather
+  ! randomly. Allows it to work when added lasa to output.
+  !--------------------------------------------------------------------!
+  call check (nf90_create (trim (file_name), &
+              cmode = nf90_64bit_offset, &
               ncid = ncid))
+  !--------------------------------------------------------------------!
   ! Define the dimensions.
-  call check (nf90_def_dim (ncid, "longitude", nlon  , lon_dimid))
-  call check (nf90_def_dim (ncid, "latitude" , nlat  , lat_dimid))
-  call check (nf90_def_dim (ncid, "plot"     , nplots, plot_dimid))
+  !--------------------------------------------------------------------!
+  call check (nf90_def_dim (ncid, "longitude", nlon    , lon_dimid ))
+  call check (nf90_def_dim (ncid, "latitude" , nlat    , lat_dimid ))
+  call check (nf90_def_dim (ncid, "plot"     , nplots  , plot_dimid))
+  call check (nf90_def_dim (ncid, "ind"      , nind_max, ind_dimid ))
+  !--------------------------------------------------------------------!
   ! Define coordinate variables.
-  call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
-              lon_varid))
-  call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
-              lat_varid))
+  !--------------------------------------------------------------------!
+  call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid , &
+              lon_varid ))
+  call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid , &
+              lat_varid ))
   call check (nf90_def_var (ncid, "plot"     , nf90_int  , plot_dimid, &
               plot_varid))
+  call check (nf90_def_var (ncid, "ind"      , nf90_int  , ind_dimid , &
+              ind_varid ))
+  !--------------------------------------------------------------------!
   dimids_three = (/ lon_dimid, lat_dimid, plot_dimid /)
+  dimids_four  = (/ lon_dimid, lat_dimid, plot_dimid, ind_dimid /)
+  !--------------------------------------------------------------------!
   ! Assign units attributes to coordinate data.
+  !--------------------------------------------------------------------!
   call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
   call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+  !--------------------------------------------------------------------!
   ! Define variables.
+  !--------------------------------------------------------------------!
   call check (nf90_def_var (ncid, "Surface_metabolic_organic_C", &
    nf90_float, dimids_three, varid_Cm))
   call check (nf90_def_var (ncid, "Surface_structural_organic_C", &
@@ -1159,8 +1345,13 @@ if (rsf_out) then
    nf90_float, dimids_three, varid_soilw2))
   call check (nf90_def_var (ncid, "Soil_water_layer_3", &
    nf90_float, dimids_three, varid_soilw3))
+  call check (nf90_def_var (ncid, "Species_number", &
+   nf90_int, dimids_four, varid_kspp))
   call check (nf90_def_var (ncid, "Foliage_C", &
-   nf90_float, dimids_three, varid_cfoliage))
+   nf90_float, dimids_four, varid_cfoliage))
+  call check (nf90_def_var (ncid, "Foliage_sapwood_area_ratio", &
+   nf90_float, dimids_four, varid_lasa))
+  !--------------------------------------------------------------------!
   call check (nf90_put_att (ncid, varid_Cm , "units", "kg[C] m-2"))
   call check (nf90_put_att (ncid, varid_Cu , "units", "kg[C] m-2"))
   call check (nf90_put_att (ncid, varid_Cn , "units", "kg[C] m-2"))
@@ -1180,10 +1371,16 @@ if (rsf_out) then
   call check (nf90_put_att (ncid, varid_soilw1, "units", "m"))
   call check (nf90_put_att (ncid, varid_soilw2, "units", "m"))
   call check (nf90_put_att (ncid, varid_soilw3, "units", "m"))
-  call check (nf90_put_att (ncid, varid_cfoliage, "units", "kg[C} ind-1"))
+  call check (nf90_put_att (ncid, varid_kspp  , "units", "n"))
+  call check (nf90_put_att (ncid, varid_cfoliage, "units", "kg[C] ind-1"))
+  call check (nf90_put_att (ncid, varid_lasa, "units", "m2 m-2"))
+  !--------------------------------------------------------------------!
   ! End definitions.
+  !--------------------------------------------------------------------!
   call check (nf90_enddef (ncid))
+  !--------------------------------------------------------------------!
   ! Write data.
+  !--------------------------------------------------------------------!
   call check (nf90_put_var (ncid, lon_varid, lon))
   call check (nf90_put_var (ncid, lat_varid, lat))
   call check (nf90_put_var (ncid, plot_varid, plot))
@@ -1206,9 +1403,14 @@ if (rsf_out) then
   call check (nf90_put_var (ncid, varid_soilw1, soilw1))
   call check (nf90_put_var (ncid, varid_soilw2, soilw2))
   call check (nf90_put_var (ncid, varid_soilw3, soilw3))
+  call check (nf90_put_var (ncid, varid_kspp  , kspp  ))
   call check (nf90_put_var (ncid, varid_cfoliage, cfoliage))
+  !call check (nf90_put_var (ncid, varid_lasa, lasa))
+  !--------------------------------------------------------------------!
   ! Close file.
+  !--------------------------------------------------------------------!
   call check (nf90_close (ncid))
+  !--------------------------------------------------------------------!
 end if
 
 if ((local) .and. (wrclim)) close (20) ! Local climate output.
