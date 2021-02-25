@@ -13,7 +13,7 @@ real, parameter :: lfl = 0.20
 real, parameter :: lrl = 0.16
 ! Biomass C content (fraction).
 real, parameter :: w = 0.45
-real, parameter :: psab = 0.996 - (0.85 - 0.68 * texture)
+real, parameter :: psab = 0.486
 ! Decay rates base values from Comins & McMurtrie (1993), but
 ! doubled to allow for inclusion of the soil water factor (/day).
 real, parameter :: d1pb = 2.0 * 0.076 * exp (-3.0 * lfl)      / 7.0
