@@ -34,51 +34,48 @@ real :: vcmax,vomax,pcpi,X,Z,alc,bcarb,brubp,ccarb,crubp
 real :: dum,q,ccicarb,ccirubp,acarb,arubp
 
 do kp = 1, nplots
-! Kinetic parameters in air space equivalents (mol[CO2] m-3).
-      kci = 1.9925e15 * exp (- 10127.01  / tfolK (kp)) / tfolK (kp)
-      koi = 2.4239e6  * exp (- 1828.1536 / tfolK (kp)) / tfolK (kp)
-      ! Rubisco oxygenation turnover number (klco) is temperature
-      ! dependent.
-      klco = 4.397e07 * exp (- 5292.02 / tfolK (kp))
-      ! Rubisco carboxylation turnover number (klcc) is temperature
-      ! dependent.
-      klcc = 2.897e14 * exp (- 9862.41 / tfolK (kp))
-      ! Light saturated rate of electron transport
-      ! (mol mol(chl)-1 s-1).
-      c = 3.486e13 * exp (- 9561.7 / tfolK (kp))
-      d = one + exp (78.178 - 23934.4 / tfolK (kp))
-      jlcmaxn = c / d
-      ! Factors for Ci solution in PGEN.
-      v = kci * (one + 8.471 / koi)
-      Y = 1.231e-7 * tfolK (kp)
-do ki = 1, nind (i,j,kp)
-       !---------------------------------------------------------------!
-       ! Get index of individual.
-       !---------------------------------------------------------------!
-       k = k_ind (land_index(i,j),kp,ki)
-       if (alive (k) == 1) then
-       ksp = kspp (k)
-if ((cfoliage (k) > eps) .and. (et_cat (k) > eps)) then
-        if (radpar > zero) then
-	 par = radpar * ipfact (k)
-	 
-	 !----------------------------------------------------------------!
-      ! efact allows for effect of transpiration on movement of CO2
-      ! molecules.
-      efact = 2.462e-7 * tfolK (kp)
-
-if (ksp == 2) then ! C4 (uses Collatz et al., 1992).
-	  ! Vcmax at 25 oC (mol m-2 s-1).
-          vmaxo = 1.248 * et_cat (k)
-	  ! Q10 2 response.
-          tfac = 2 ** ((tfolK (kp) - 298.15) / 10.0)
-	  num = vmaxo * tfac
-          den = (one + exp (0.3 * (286.15 - tfolK (kp)))) * &
-                (one + exp (0.3 * (tfolK (kp) - 309.15)))
-          vmax = num / den
+ ! Kinetic parameters in air space equivalents (mol[CO2] m-3).
+ kci = 1.9925e15 * exp (- 10127.01  / tfolK (kp)) / tfolK (kp)
+ koi = 2.4239e6  * exp (- 1828.1536 / tfolK (kp)) / tfolK (kp)
+ ! Rubisco oxygenation turnover number (klco) is temperature
+ ! dependent.
+ klco = 4.397e07 * exp (- 5292.02 / tfolK (kp))
+ ! Rubisco carboxylation turnover number (klcc) is temperature
+ ! dependent.
+ klcc = 2.897e14 * exp (- 9862.41 / tfolK (kp))
+ ! Light saturated rate of electron transport (mol mol(chl)-1 s-1).
+ c = 3.486e13 * exp (- 9561.7 / tfolK (kp))
+ d = one + exp (78.178 - 23934.4 / tfolK (kp))
+ jlcmaxn = c / d
+ ! Factors for Ci solution in PGEN.
+ v = kci * (one + 8.471 / koi)
+ Y = 1.231e-7 * tfolK (kp)
+ do ki = 1, nind (i,j,kp)
+  !---------------------------------------------------------------!
+  ! Get index of individual.
+  !---------------------------------------------------------------!
+  k = k_ind (land_index(i,j),kp,ki)
+  if (alive (k) == 1) then
+   ksp = kspp (k)
+   if ((cfoliage (k) > eps) .and. (et_cat (k) > eps)) then
+    if (radpar > zero) then
+     par = radpar * ipfact (k)
+     !------------------------------------------------------------!
+     ! efact allows for effect of transpiration on movement of CO2
+     ! molecules.
+     efact = 2.462e-7 * tfolK (kp)
+     if (ksp == 2) then ! C4 (uses Collatz et al., 1992).
+      ! Vcmax at 25 oC (mol m-2 s-1).
+      vmaxo = 1.248 * et_cat (k)
+      ! Q10 2 response.
+      tfac = 2 ** ((tfolK (kp) - 298.15) / 10.0)
+      num = vmaxo * tfac
+      den = (one + exp (0.3 * (286.15 - tfolK (kp)))) * &
+            (one + exp (0.3 * (tfolK (kp) - 309.15)))
+      vmax = num / den
 	  kt = 18000.0 * vmax
 	  cair = P_Pa / (R * tfolK (kp))
-          rch = one / gc (ki)
+          rch = one / gc (k)
           rd = 0.021 * vmax
 	  num = 2.0 * rch * rd - rch * efact * ccair + 2.0 * ccair
           den = 2.0 + rch * efact + 2.0 * rch * kt / cair
@@ -111,11 +108,11 @@ if (ksp == 2) then ! C4 (uses Collatz et al., 1992).
           X = jn / 4.5
           Z = 2.3333 * pcpi
 	  ! alc is the same for all solutions.
-          alc = gc (ki) + Y
-	  bcarb = gc (ki) * (v - ccair) + Y * (v + ccair) + vcmax - rd
-          brubp = gc (ki) * (Z - ccair) + Y * (Z + ccair) + X - rd
-          ccarb = v * ccair * (y - gc (ki)) - vcmax * pcpi - rd * v
-          crubp = Z * ccair * (Y - gc (ki)) - pcpi * (X + 2.3333 * rd)
+          alc = gc (k) + Y
+	  bcarb = gc (k) * (v - ccair) + Y * (v + ccair) + vcmax - rd
+          brubp = gc (k) * (Z - ccair) + Y * (Z + ccair) + X - rd
+          ccarb = v * ccair * (y - gc (k)) - vcmax * pcpi - rd * v
+          crubp = Z * ccair * (Y - gc (k)) - pcpi * (X + 2.3333 * rd)
 	  ! Stable root solution from Numerical Recipes.
           dum = sqrt (bcarb * bcarb - 4.0 * alc * ccarb)
 	  ! 'sign (x, y)' returns abs. of x times sign of y.
@@ -127,10 +124,10 @@ if (ksp == 2) then ! C4 (uses Collatz et al., 1992).
           q = (-0.5) * (brubp + dum)
           ccirubp = max (q / alc, crubp / q)
 	  ! Carboxyation-limited net photosynthesis.
-          acarb = gc (ki) * (ccair - ccicarb) - &
+          acarb = gc (k) * (ccair - ccicarb) - &
 	          ((ccair + ccicarb) / 2.0) * efact
           ! RuBP-regeneration-limited net photosynthesis.
-          arubp = gc (ki) * (ccair - ccirubp) - &
+          arubp = gc (k) * (ccair - ccirubp) - &
                   ((ccair + ccirubp) / 2.0) * efact
           ! Non co-limited rate of photosynthesis (mol[CO2] m-2 -s1).
           A = min (acarb, arubp)
@@ -139,7 +136,6 @@ if (ksp == 2) then ! C4 (uses Collatz et al., 1992).
 	 end if
 	 ! Allow for minimum temperature factor.
          A = nitf (k) * A
-	 
 	 ! Change units from mol[CO2] to kg[C].
 	 A = A * 0.012
 	 ! Canopy carbon balance with light (kg[C] ind-1 s-1).
