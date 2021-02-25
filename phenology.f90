@@ -32,7 +32,7 @@ integer :: ktemp
 !----------------------------------------------------------------!
 ! Accumulate chilling-days (days).
 !----------------------------------------------------------------!
-      if (tmind < thold) cd (i,j) = cd (i,j) + 1
+      if (tmind <= thold) cd (i,j) = cd (i,j) + 1
 ! Yearday on hemisphere-basis.
       if (lat (j) >= zero) then
        ktemp = kday
