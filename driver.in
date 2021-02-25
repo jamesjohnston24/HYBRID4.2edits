@@ -1,17 +1,18 @@
-.FALSE.  ! local
--70.0   ! lon_w
--3.0  ! lat_w
+.TRUE.  ! local
+  0.0   ! lon_w
+ 52.0   ! lat_w
 .FALSE. ! rsf_in
 .FALSE. ! rsf_out
 .TRUE.  ! ran_s
 0.1     ! iscv
 1901    ! syr
 1910    ! eyr
-1       ! nplots
+10      ! nplots
 200.0   ! area
-500     ! imax (10000 -> 200/plot)
+10000   ! imax (10000 -> 200/plot)
 0.001   ! idbh
 0.9     ! idbhv
+10.0    ! ndepi (kg[N] ha-1 yr-1 - > kg[N] m-2 d-1)
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
