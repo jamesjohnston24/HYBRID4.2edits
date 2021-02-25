@@ -15,7 +15,7 @@ real, parameter :: fkeight = (ftmax - fkfive) / (fkfive - ftmin)
 real, parameter :: swpmax = -0.033 ! MPa
 real, parameter :: bsoil = 5.0
 real, parameter :: intc   = 0.0005 * dt / sday ! m LAI-1 dt-1
-real, parameter :: smeltc = 0.0007 * dt / sday ! m K-1 dt-1
+real, parameter :: smeltc = 0.0007 * dt / sday ! m oC-1 dt-1
 real, parameter :: fout   = 0.9 ! fraction
 real :: rhoa
 real :: lambda
@@ -34,7 +34,7 @@ real :: tt
 real :: sow1
 real :: sc1
 real :: sw1,sw2
-real :: swp1,swp3
+real :: swp3
 real :: tr_grass,tr_tot,tr_rat
 real :: psin
 real :: cgc
@@ -187,10 +187,10 @@ do kp = 1, nplots
   !--------------------------------------------------------------------!
   if ((ki == 1) .or. (ki == 2)) then
    ! Soil water factor for grass.
-   if (swp1 > (-1.5)) fdt = 1.155 + 0.77 * &
-	 (swp1 - 0.015 * float (height (k)))
-    if (swp1 >  (-0.2)) fdt = one
-    if (swp1 <= (-1.5)) fdt = zero
+   if (swp1 (kp) > (-1.5)) fdt = 1.155 + 0.77 * &
+	 (swp1 (kp) - 0.015 * float (height (k)))
+    if (swp1 (kp) >  (-0.2)) fdt = one
+    if (swp1 (kp) <= (-1.5)) fdt = zero
   else
    ! Soil water factor for trees.
    if (swp2 (kp) > (-1.5)) fdt = 1.155 + 0.77 * &
@@ -214,16 +214,16 @@ do kp = 1, nplots
   !--------------------------------------------------------------------!
   if (cfact (k) > eps) then
    !-------------------------------------------------------------------!
-   !rwi = (0.607 * rac (ksp) + one / gs) * area / cfact (k)
+   rwi = (0.607 * rac (ksp) + one / gs) * area / cfact (k)
    !-------------------------------------------------------------------!
    ! Sum canopy conductance across individuals (m[H2O s-1).
    !-------------------------------------------------------------------!
-   !cgc = cgc + one / rwi
+   cgc = cgc + one / rwi
    !-------------------------------------------------------------------!
    ! Sum relative amount of transpiration due to trees.
    !-------------------------------------------------------------------!
-   !tr_tot = tr_tot + one / rwi
-   !if (ksp <= 2) tr_grass = tr_grass + one / rwi
+   tr_tot = tr_tot + one / rwi
+   if (ksp <= 2) tr_grass = tr_grass + one / rwi
    !-------------------------------------------------------------------!
   end if
   end if ! alive
@@ -311,7 +311,7 @@ do kp = 1, nplots
   ! Total conductance to CO2 transfer from outside leaf boundary
   ! layer to outside mesophyll liquid phase of upper layer
   ! (m s-1), used in PGEN.
-  gc (ki) = one / rcn
+  gc (k) = one / rcn
   !--------------------------------------------------------------------!
   end if ! alive
  end do ! ki
@@ -496,7 +496,7 @@ do kp = 1, nplots
   !--------------------------------------------------------------------!
   ! Soil water potential for grass (MPa).
   !--------------------------------------------------------------------!
-  swp1 = sw1
+  swp1 (kp) = sw1
   !--------------------------------------------------------------------!
   ! Soil water potential for trees (MPa).
   !--------------------------------------------------------------------!
@@ -514,7 +514,7 @@ do kp = 1, nplots
   !--------------------------------------------------------------------!
   ! Soil frozen.
   !--------------------------------------------------------------------!
-  swp1 = -1.48
+  swp1 (kp) = -1.48
   swp2 (kp) = -1.48
   tr_rat = zero
   !--------------------------------------------------------------------!
