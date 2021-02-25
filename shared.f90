@@ -1,5 +1,15 @@
 module shared
 implicit none
+
+!****adf
+logical :: rsf_in
+logical :: ran_s
+integer :: syr,eyr
+integer :: i_w,j_w
+real :: iscv
+integer :: limp
+!****adf
+
 integer, parameter :: nd        =    365
 integer, parameter :: nland_max =  67420
 integer, parameter :: nlon      =    720
@@ -24,36 +34,40 @@ real, parameter :: d_one = 0.2
 logical, parameter :: wrclim = .FALSE. ! Write local climate?
 !                                       C3GR   C4GR   BRCD   NLEV
 real, dimension (nspp) :: kpar    = (/  0.65,  0.65,  0.65,  0.50/)
-real, dimension (nspp) :: kSW     = (/  0.48,  0.48,  0.48,  0.37/)
-real, dimension (nspp) :: rhos    = (/  0.20,  0.20,  0.20,  0.11/)
-real, dimension (nspp) :: nrc     = (/  9.31,  9.31,  9.31,  9.31/)
+real, dimension (nspp) :: ksw     = (/  0.48,  0.48,  0.48,  0.37/)
 real, dimension (nspp) :: rhop    = (/  0.05,  0.05,  0.05,  0.03/)
+real, dimension (nspp) :: rhos    = (/  0.20,  0.20,  0.20,  0.11/)
+real, dimension (nspp) :: fturn   = (/0.0031,0.0031,  0.33,  0.33/)
+real, dimension (nspp) :: wturn   = (/0.0031,0.0031,  0.01,  0.01/)
+real, dimension (nspp) :: rturn   = (/0.0031,0.0031,  2.00,  2.00/)
 real, dimension (nspp) :: sla     = (/  36.0,  36.0,  36.0,  12.0/)
 real, dimension (nspp) :: bark    = (/   1.0,   1.0, 0.033,  0.01/)
+real, dimension (nspp) :: lsave   = (/  0.00,  0.00,4167.0,3333.0/)
 real, dimension (nspp) :: ah      = (/  0.00,  0.00, 28.51, 32.95/)
 real, dimension (nspp) :: bh      = (/  0.00,  0.00,0.4667,0.5882/)
 real, dimension (nspp) :: stf     = (/  0.00,  0.00,  0.22, 0.222/)
-real, dimension (nspp) :: formf   = (/  0.00,  0.00,   0.6,  0.56/)
-real, dimension (nspp) :: woodd   = (/  0.00,  0.00, 305.0, 205.0/)
-real, dimension (nspp) :: lsave   = (/  0.00,  0.00,4167.0,3333.0/)
 real, dimension (nspp) :: rlratio = (/   1.0,   1.0,   1.0,   1.0/)
-real, dimension (nspp) :: live    = (/  0.00,  0.00,  0.17,0.0708/)
-real, dimension (nspp) :: storef  = (/  0.00,  0.00,  0.67,  0.67/)
-real, dimension (nspp) :: fsr     = (/ 0.145, 0.145, 0.145, 0.145/)
-real, dimension (nspp) :: frr     = (/  0.86,  0.86,  0.86,  0.86/)
-real, dimension (nspp) :: wmf     = (/   0.1,   0.1,   0.1,   0.1/)
-real, dimension (nspp) :: rgf     = (/  0.75,  0.75,  0.75,  0.75/)
-real, dimension (nspp) :: wturn   = (/ 0.031, 0.031,  0.01,  0.01/)
-real, dimension (nspp) :: rturn   = (/ 0.031, 0.031,  2.00,  2.00/)
 real, dimension (nspp) :: frcoeff = (/   0.5,   0.5,   0.5,   0.5/)
 real, dimension (nspp) :: rrcoeff = (/   1.0,   1.0,   1.0,   1.0/)
+real, dimension (nspp) :: woodd   = (/  0.00,  0.00, 305.0, 205.0/)
+real, dimension (nspp) :: formf   = (/  0.00,  0.00,   0.6,  0.56/)
+real, dimension (nspp) :: fsr     = (/ 0.145, 0.145, 0.145, 0.145/)
+real, dimension (nspp) :: frr     = (/  0.86,  0.86,  0.86,  0.86/)
+real, dimension (nspp) :: live    = (/  0.00,  0.00,  0.17,0.0708/)
+real, dimension (nspp) :: storef  = (/  0.00,  0.00,  0.67,  0.67/)
 real, dimension (nspp) :: nupc    = (/ 0.036, 0.036, 0.036, 0.036/)
-integer, dimension (nspp) :: ptype = (/    1,     1,     3,     2/)
-integer, dimension (nspp) :: weff  = (/    2,     2,     2,     2/)
 ! Ratio between gmax and Rubisco N (mol[H2O] m-2 s-1 / (kg[N] m-2)).
 real, dimension (nspp) :: ngr     = (/1359.0,4652.0,1672.0,2223.0/)
 ! Cuticular conductance to CO2 (m s-1).
 real, dimension (nspp) :: gmin    = (/4.81e-5,4.81e-5,4.81e-5,4.81e-5/)
+real, dimension (nspp) :: ao      = (/  0.67,  0.99,  0.67,  0.83/)
+real, dimension (nspp) :: nrc     = (/  9.31,  9.31,  9.31,  9.31/)
+real, dimension (nspp) :: d_leaf  = (/  0.04,  0.04,  0.04,  0.04/)
+real, dimension (nspp) :: weffi   = (/   2.0,   2.0,   2.0,   2.0/)
+real, dimension (nspp) :: ptypei = (/    1,     1,     3,     2/)
+real, dimension (nspp) :: rgf     = (/  0.75,  0.75,  0.75,  0.75/)
+real, dimension (nspp) :: wmf     = (/   0.1,   0.1,   0.1,   0.1/)
+real, dimension (nspp) :: crratio
 ! Initial slope of photosynthetic light response (mol m-1).
 real, parameter :: alphas  = 0.04
 ! Chilling-day upper limit (oC).
@@ -61,6 +75,9 @@ real, parameter :: thold   = 5.0
 real, allocatable, dimension (:) :: et_cat
 real, dimension (nspp) :: pruba
 real, dimension (nspp) :: slope
+integer, dimension (nspp) :: weff
+integer, dimension (nspp) :: ptype
+real, dimension (nspp) :: raw
 real, dimension (nspp) :: f1,f2,f3
 real, dimension (nspp) :: fturn_save
 real, dimension (nspp) :: rac
@@ -95,6 +112,7 @@ real    :: pptod
 real    :: vm ! N:C ratio of surface metabolic litter
 real    :: vn ! N:C ratio of soil metabolic litter
 real    :: radpar ! mol[PAR] m-2 s-1
+real    :: uwind
 real    :: P_Pa
 real    :: tfacs
 real    :: ccair
@@ -106,9 +124,10 @@ real    :: tairC ! oC
 real    :: ppt   ! m dt-1
 real    :: fc
 real    :: tfaca1,tfaca2
+real    :: ndepi
 real, dimension (2019-1700+1) :: cao ! Pa
-integer :: i,i1
-integer :: j,j1
+integer :: i,i1,i2
+integer :: j,j1,j2
 integer :: kyr
 integer :: kday,jdl
 integer :: it
@@ -124,7 +143,7 @@ real, parameter :: fillvalue = 1.0e20
 integer :: varid1,varid2,varid3
 integer :: varid_C3GR,varid_C4GR,varid_BRCD,varid_NLEV
 !----------------------------------------------------------------------!
-real   , dimension (nlat,nd) :: dl
+real   , dimension (nlat,0:nd) :: dl
 integer, dimension (nlon,nlat) :: land_index
 real   , dimension (nlon,nlat) :: ddreq
 real   , dimension (nlon,nlat) :: rltdl
@@ -158,6 +177,7 @@ real   , allocatable, dimension (:) :: flittn
 real   , allocatable, dimension (:) :: rlittc
 real   , allocatable, dimension (:) :: rlittn
 real   , allocatable, dimension (:) :: wfps
+real   , allocatable, dimension (:) :: swp1
 real   , allocatable, dimension (:) :: swp2
 integer, allocatable, dimension (:) :: dd_flag
 real   , allocatable, dimension (:) :: outflow
