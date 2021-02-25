@@ -6,7 +6,7 @@ implicit none
 integer :: kp
 integer :: ki
 integer :: p
-integer :: k
+integer :: k,k1,k2
 integer :: ksp
 real :: cfmin,maxcf
 real :: flitterc,wlitterc,rlitterc
@@ -18,14 +18,9 @@ real :: grg
 real :: rnmax,rnlose,rnsave
 
 do kp = 1, nplots
-       p = p_plot (land_index(i,j),kp)
-       laip (i,j,kp) = zero
-       do ki = 1, nind (i,j,kp)
-        k = k_ind (land_index(i,j),kp,ki)
-	if (alive (k) == 1) then
-	ksp = kspp (k)
-        !-----------------------------------------------------------!
-	if (ksp <= 2) then
+ do ki = 1, 2
+  k = k_ind (land_index(i,j),kp,ki)
+  ksp = kspp (k)
          !----------------------------------------------------------!
 	 ! Min. amount of grass foliage mass allowed (kg[C] plot-1).
          !----------------------------------------------------------!
@@ -88,7 +83,7 @@ do kp = 1, nplots
 	 ! Maximum possible grass foliage C based on available C
 	 ! (kg[C] plot-1).
          !----------------------------------------------------------!
-         potf = cavail / (one + (one + bark (ksp)) * rlratio (ksp))
+         potf = cavail / (one + (one + crratio (ksp)) * rlratio (ksp))
          !----------------------------------------------------------!
 	 ! Grass foliage growth limited by soil water potential.
 	 !****adf swp2 should be mean over day.
@@ -107,7 +102,7 @@ do kp = 1, nplots
          !----------------------------------------------------------!
          cfoliage (k) = max (cfoliage (k), cfmin)
          !----------------------------------------------------------!
-	 lsap (k) = bark (ksp) * cfoliage (k)
+	 lsap (k) = crratio (ksp) * cfoliage (k)
          cfiner (k) = rlratio (ksp) * cfoliage (k)
          !----------------------------------------------------------!
 	 ! New grass structural C (kg[C] plot-1). Used to calculate
@@ -173,9 +168,10 @@ do kp = 1, nplots
           Cpa (i,j,kp) = max (Cpa (i,j,kp), eps)
          end if
          !----------------------------------------------------------!
-	end if
-	end if ! alive
        end do ! ki
+       k1 = k_ind (land_index(i,j),kp,1)
+       k2 = k_ind (land_index(i,j),kp,2)
+       laip (i,j,kp) = farea (k1) + farea (k2)
       end do ! kp
       
 end subroutine grass
