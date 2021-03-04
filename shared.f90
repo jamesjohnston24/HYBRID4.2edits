@@ -10,6 +10,7 @@ real :: iscv
 integer :: limp
 !****adf
 
+integer, parameter :: ntimes    =   1460 ! Climate timepoints yr-1
 integer, parameter :: nd        =    365
 integer, parameter :: nland_max =  67420
 integer, parameter :: nlon      =    720
@@ -108,7 +109,6 @@ real    :: ftsoil
 real    :: tmind
 real    :: Ndepo
 real    :: nf
-real    :: pptod
 real    :: vm ! N:C ratio of surface metabolic litter
 real    :: vn ! N:C ratio of soil metabolic litter
 real    :: radpar ! mol[PAR] m-2 s-1
@@ -135,7 +135,6 @@ integer :: it
 integer :: nplots     ! No. plots/grid-box.
 integer :: nind_total ! Total no. plants in simulation.
 integer :: nind_max   ! Max. individuals/plot.
-integer :: nland
 !----------------------------------------------------------------------!
 ! netCDF parameters and variables.
 !----------------------------------------------------------------------!

@@ -5,7 +5,6 @@ use mpi
 use shared
 implicit none
 
-integer, parameter :: ntimes      =  1460
 character (len = 250) :: file_name ! Generic filename
 integer, parameter :: fillvalue_int = -99999
 character (len = 100) :: var_name
@@ -27,6 +26,7 @@ integer :: k
 integer :: p
 integer :: il
 integer :: m
+integer :: ii,jj ! To index 1/4-degree cover fractions
 integer :: nplots_total
 integer :: iregl,ireglc
 integer :: nlayers
@@ -47,6 +47,8 @@ real :: isc_total ! Total global soil C (Pg[C])
 real :: ran ! Random number (0-1)
 real :: noise ! Noise on initial soil C (ratio)
 real :: caod ! ppm
+real :: lati,loni,rltdli,ddreqi
+real :: phi,rn,delta,tn,gn
 real, dimension (mh+1) :: fPARt
 real, dimension (mh+1) :: fSWt
 real, dimension (mh+1) :: fPARi
@@ -57,6 +59,8 @@ real, dimension (mh+1) :: eskz
 real, dimension (mh+1) :: eskSWz
 real, allocatable, dimension (:,:) :: isc ! Initial soil C (kg[C] m-2)
 real, allocatable, dimension (:,:) :: isc_grid ! Init soil C (kg[C] m-2)
+real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water fraction
+real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2)
 
 !----------------------------------------------------------------------!
 ! Variables from 'driver.in'.
@@ -81,6 +85,8 @@ integer :: imax    ! Max. tree density (tree/ha)
 allocate (isc  (nlon,nlat))
 ! Initial total soil C grid-box mean (kg[C] m-2)
 allocate (isc_grid  (nlon,nlat))
+allocate (icwtr_qd (2*nlon,2*nlat))
+allocate (larea_qd (2*nlon,2*nlat))
 
 Cn  (:,:,:) = zero
 Cu  (:,:,:) = zero
@@ -1145,7 +1151,107 @@ do j = j1, j2
   end if ! tmp (i,j,1) /= fillvalue
  end do ! i
 end do ! j
+allocate (ball (nind_total))
+allocate (foff (nind_total))
+allocate (fon  (nind_total))
+NPP_grid     (:,:) = fillvalue
+Cv_grid      (:,:) = fillvalue
+Cs_grid      (:,:) = fillvalue
+Cv_C3GR_grid (:,:) = fillvalue
+Cv_C4GR_grid (:,:) = fillvalue
+Cv_BRCD_grid (:,:) = fillvalue
+Cv_NLEV_grid (:,:) = fillvalue
 outflow (:) = zero
+summer = .FALSE.
+dd (:,:) = zero
+cd (:,:) = zero
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Read in ice/water fractions for each grid-box, and areas (km2).
+! Water is ocean and freshwater bodies from map.
+!----------------------------------------------------------------------!
+file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
+&LUH2_new/staticData_quarterdeg.nc'
+write (*, *) 'Reading from ', trim (file_name)
+call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
+varid = 7
+call check (nf90_get_var (ncid, varid, icwtr_qd))
+varid = 9
+call check (nf90_get_var (ncid, varid, larea_qd))
+call check (nf90_close (ncid))
+!----------------------------------------------------------------------!
+! Input file is 1/4 degree, so gridded to 1/2 degree. Need to invert.
+! Assume no missing values.
+!----------------------------------------------------------------------!
+jj = 1
+do j = 1, nlat
+ ii = 1
+ do i = 1, nlon
+  icwtr (i, nlat-j+1) = sum (icwtr_qd (ii:ii+1, jj:jj+1)) / 4.0
+  larea (i, nlat-j+1) = sum (larea_qd (ii:ii+1, jj:jj+1))
+  ii = ii + 2
+ end do
+ jj = jj + 2
+end do
+!----------------------------------------------------------------------!
+
+
+!----------------------------------------------------------------------!
+! Read phenology parameters for each grid-box.
+! Should re-create these based on TRENDY grid and climate.
+!----------------------------------------------------------------------!
+rltdl (:,:) = zero
+ddreq (:,:) = zero
+open (10,file='spin_up.phen',status='old')
+do k = 1, 67420
+ read (10,*) lati,loni,rltdli,ddreqi
+ i = nint ((loni - 0.25 + 180.0) * 2.0) + 1
+ j = nint ((lati - 0.25 +  90.0) * 2.0) + 1
+ rltdl (i,j) = rltdli
+ ddreq (i,j) = ddreqi
+end do
+close (10)
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Daylengths (s). Try to only do local when local.
+!----------------------------------------------------------------------!
+do j = 1, nlat
+ !...phi is latitude (radians)
+ phi = pi * abs (lat (j)) / 180.0
+ ! Calculate daylength for each yearday.
+ do jdl = 1, nd
+  ! rn is climatological day number
+  rn = float (jdl)
+  ! delta is solar declination (radians), depends on time of year.
+  ! Calculation taken from Spitters et al., 1986 (Eqn. 16, p. 226).
+  delta = asin (-1.0 * sin (23.45 * pi / 180.0) * &
+          cos (360.0 * pi / 180.0 * (rn + 10.0) / float (nd)))
+  ! Daylength calculation based on France & Thornley (1984).
+  ! tn is used in daylength calculation.
+  tn = - 1.0 * tan (phi) * tan (delta)
+  ! Check if daylength between 0 and 24 hr.
+  if ((tn >= -1.0) .and. (tn <= 1.0)) then
+   ! gn is decimal parts of a day.
+   gn = (180.0 / pi) * 2.0 * acos (tn) / 360.0
+  else
+   if (tn > one) then
+    gn = zero
+   else
+    gn = one
+   end if
+  end if
+  dl (j,jdl) = gn * sday
+ end do ! jdl
+ ! Invert if in southern hemisphere.
+ if (lat (j) < zero) then
+  do kday = 0, nd
+   dl (j,kday) = sday - dl (j,kday)
+  end do
+ end if
+ !dl (j,0) = dl (j,nd) ! needed?
+end do ! j
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!

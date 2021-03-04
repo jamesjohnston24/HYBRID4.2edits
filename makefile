@@ -5,21 +5,23 @@ FFLAGS = -O3
 LDFLAGS = -lnetcdff -lnetcdf
 
 SRC = \
-	hybrid4_2.f90          \
-	initl.f90              \
-	getclmn.f90            \
-	hydrology.f90          \
-	carbon.f90             \
-	nitrogen.f90           \
-	grass.f90              \
-	phenology.f90          \
-	soil.f90               \
-	allocate.f90           \
-	mortal.f90             \
-	regen.f90              \
-	radiation.f90          \
-	annual_diagnostics.f90 \
-	run_finish.f90         \
+	hybrid4_2.f90		\
+	initl.f90		\
+	init_yr.f90		\
+	init_grid_box.f90	\
+	getclmn.f90		\
+	hydrology.f90		\
+	carbon.f90		\
+	nitrogen.f90		\
+	grass.f90		\
+	phenology.f90		\
+	soil.f90		\
+	allocate.f90		\
+	mortal.f90		\
+	regen.f90		\
+	radiation.f90		\
+	annual_diagnostics.f90	\
+	run_finish.f90		\
 	shared.f90
 
 OBJ = $(SRC:.f90=.o)
@@ -28,12 +30,18 @@ hybrid4_2.exe : $(OBJ)
 	$(F90) $(FFLAGS) -o hybrid4_2.exe $(OBJ) $(LDFLAGS)
 
 # Main routine.
-hybrid4_2.o : shared.o initl.o getclmn.o hydrology.o carbon.o nitrogen.o grass.o phenology.o soil.o allocate.o mortal.o regen.o radiation.o annual_diagnostics.o run_finish.o hybrid4_2.f90
+hybrid4_2.o : shared.o initl.o init_yr.o init_grid_box.o getclmn.o hydrology.o carbon.o nitrogen.o grass.o phenology.o soil.o allocate.o mortal.o regen.o radiation.o annual_diagnostics.o run_finish.o hybrid4_2.f90
 	$(F90) $(FFLAGS) -c hybrid4_2.f90
 	
 # Subroutines.
 initl.o : shared.o initl.f90
 	$(F90) $(FFLAGS) -c initl.f90
+
+init_yr.o : shared.o init_yr.f90
+	$(F90) $(FFLAGS) -c init_yr.f90
+
+init_grid_box.o : shared.o init_grid_box.f90
+	$(F90) $(FFLAGS) -c init_grid_box.f90
 	
 getclmn.o : shared.o getclmn.f90
 	$(F90) $(FFLAGS) -c getclmn.f90

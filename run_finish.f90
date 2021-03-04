@@ -20,10 +20,10 @@ integer :: varid_hbc
 integer :: varid_land_index
 integer :: varid_cd,varid_dd,varid_bgs,varid_egs
 integer :: varid_k_ind
-integer :: varid_cm,varid_cu,varid_cn,varid_cv,varid_ca,varid_cs
-integer :: varid_nm,varid_nu,varid_nn,varid_nv,varid_na,varid_ns
-integer :: varid_cpa
-integer :: varid_npa
+integer :: varid_Cm,varid_Cu,varid_Cn,varid_Cv,varid_Ca,varid_Cs
+integer :: varid_Nm,varid_Nu,varid_Nn,varid_Nv,varid_Na,varid_Ns
+integer :: varid_Cpa
+integer :: varid_Npa
 integer :: varid_snmin
 integer :: varid_nind
 integer :: varid_snow,varid_soilw1,varid_soilw2,varid_soilw3
@@ -619,9 +619,6 @@ end if
 if ((local) .and. (wrclim)) close (20) ! Local climate output.
 if (local) close (21) ! soil carbon output.
 if (local) close (22) ! soil water output.
-
-!----------------------------------------------------------------------!
-write (*,*) 'nland = ', nland
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!

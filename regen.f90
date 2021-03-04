@@ -144,7 +144,7 @@ real :: ht
        end if
       end if
      end do ! ki
-     phenf (kp) = 1
+     !****adfphenf (kp) = 1
     end do ! kp
     !------------------------------------------------------------------!
     ! End of regeneration routines.

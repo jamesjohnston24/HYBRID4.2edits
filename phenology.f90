@@ -285,7 +285,8 @@ do kp = 1, nplots
         end if
 	! If the leaf area changed then set tree leaf area change
 	! flag.
-        if (farea (k) /= rlold (k)) then
+	! !****adf made above limit.
+        if (abs (farea (k) - rlold (k)) > eps) then
          ! Flag for tree leaf area change.
          phenf (kp) = 1
         end if ! End of leaf area change conditional.
@@ -410,7 +411,7 @@ do kp = 1, nplots
     ! Factor to calculate absorbed SW by whole plot (ratio).
     !------------------------------------------------------------------!
     !SWf (p) = zero
-    end if ! phenf = 1
+    end if ! phenf = 0
     end do ! kp
     !------------------------------------------------------------------!
     

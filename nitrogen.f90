@@ -7,6 +7,7 @@ integer :: kp
 integer :: ki
 integer :: ksp
 integer :: k
+real :: pptod
 real :: tup
 real :: harea
 real :: hheight
@@ -16,6 +17,8 @@ real :: rnfrac
 real :: rat
 real, dimension (nind_max) :: ngains
 real, dimension (nspp) :: fwsoil
+
+pptod = sum (pre (i, j, it-3:it)) / 1000.0
 
       !-------------------------------------------------------------!
       ! Mineral N addition from atmosphere (kg[C] m-1 d-1).
