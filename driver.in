@@ -1,17 +1,17 @@
-.TRUE.  ! local
-  0.0   ! lon_w
- 52.0   ! lat_w
-.FALSE. ! rsf_in
-.FALSE. ! rsf_out
-.TRUE.  ! ran_s
-0.1     ! iscv
-1901    ! syr
-1910    ! eyr
-10      ! nplots
-200.0   ! area
-10000   ! imax (10000 -> 200/plot)
-0.001   ! idbh
-0.9     ! idbhv
+.FALSE. ! local   ! Local (single grid-box) only?                 (flag)
+-70.0   ! lon_w   ! Longitude if local simulation         (degrees east)
+ -3.0   ! lat_w   ! Latitude if local simulation         (degrees north)
+.FALSE. ! rsf_in  ! Initialise from restart file?
+.FALSE. ! rsf_out ! Output final state to restart file?           (flag)
+.TRUE.  ! ran_s   ! Noise on initial plot soil C (not use RSF)?
+0.1     ! iscv    ! Noise on initial plot soil C  (fraction around mean)
+1901    ! syr     ! Start year of simulation                        (CE)
+1910    ! eyr     ! End year of simulation                          (CE)
+1       ! nplots  ! Number of plots per grid-box                     (n)
+200.0   ! area    ! Plot area                                       (m2)
+500     ! imax (10000->200/plot; 500->10)
+0.001   ! idbh    ! Initial tree DBH mean                            (m)
+0.9     ! idbhv   ! Variation around idbh                     (fraction)
 10.0    ! ndepi (kg[N] ha-1 yr-1 - > kg[N] m-2 d-1)
 !----------------------------------------------------------------------!
 
