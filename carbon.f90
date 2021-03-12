@@ -1,186 +1,482 @@
+!======================================================================!
 subroutine carbon
+!----------------------------------------------------------------------!
+! Computes carbon balance of each individual.
+! Computes carbon balance of lowest foliage layers.
+!----------------------------------------------------------------------!
 
+!----------------------------------------------------------------------!
 use shared
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
 implicit none
+!----------------------------------------------------------------------!
 
-integer :: kp
-integer :: ki
-integer :: k
-integer :: ksp
-real :: kci
-real :: koi
-real :: klco
-real :: klcc
-real :: c,d
-real :: jlcmaxn
-real :: v,Y
-real :: par
-real :: tfac
-real :: num,den
-real :: kt
-real :: cair
-real :: vmax
-real :: rch
-real :: A,E
-real :: efact
-real :: vmaxo
-real :: cffol,cfwood,cffiner,cflux
-real :: rd
-real :: ci
-real :: ai
-real :: ac,ae
-real :: jmaxn,jn
-real :: vcmax,vomax,pcpi,X,Z,alc,bcarb,brubp,ccarb,crubp
-real :: dum,q,ccicarb,ccirubp,acarb,arubp
+!----------------------------------------------------------------------!
+! Initial slope of photosyn. light response    (mol[CO2] mol[photons]-1)
+!----------------------------------------------------------------------!
+real, parameter :: alphas  = 0.04
+!----------------------------------------------------------------------!
 
+!----------------------------------------------------------------------!
+! Miscellaneous variables used in this subroutine.
+!----------------------------------------------------------------------!
+integer :: kp  ! Plot number in grid-box                          (plot)
+integer :: p   ! Plot number in simulation                        (plot)
+integer :: ki  ! Individual number in plot                         (ind)
+integer :: k   ! Individual number in simulation                   (ind)
+integer :: ksp ! GPT number                                        (GPT)
+real :: kci     ! Michaelis-Menten constant for CO2  (mol[CO2] m[air]-3)
+real :: koi     ! Michaelis-Menten constant for O2    (mol[O2] m[air]-3)
+real :: klco    ! Rubisco oxygenation turnover number                (-)
+real :: klcc    ! Rubisco carboxylation turnover number              (-)
+real :: c       ! Numerator in jlcmaxn calculation
+real :: d       ! Denominator in jlcmaxn calculation
+real :: jlcmaxn ! Light-saturated e-transport    (mol[e] mol[chl]-1 s-1)
+real :: v       ! Factor for Ci solution
+real :: y       ! Factor for Ci solution
+real :: par     ! PAR absorbed by upper layer of ind. (mol[PAR] m-2 s-1)
+real :: tfac    ! Q10 function of C4 Vmax
+real :: num     ! Numerator for C4 Vmax
+real :: den     ! Denominator for C4 Vmax
+real :: kt      ! C4 rate of carboxylation?
+real :: cair    ! Air density                             (mol[air] m-3)
+real :: vmax    ! Vmax for C4                         (mol[CO2] m-2 s-1)
+real :: rch     ! Canopy resistance to CO2 diffusion        (s m[CO2]-1)
+real :: A       ! Foliage photosynthesis              (mol[CO2] m-2 s-1)
+real :: efact   ! Effect of transpiration on CO2 flux                (?)
+real :: vmaxo   ! C4 Vcmax at 25oC                    (mol[CO2] m-2 s-1)
+real :: rd      ! Foliage dark respiration            (mol[CO2] m-2 s-1)
+real :: ci      ! Internal foliage CO2                    (mol[CO2] m-3)
+real :: ai      ! C4 light-limited photosynthesis     (mol[CO2] m-2 s-1)
+real :: ac      ! C4 CO2-limited photosynthesis       (mol[CO2] m-2 s-1)
+real :: ae      ! C4 Vmax-limited photosynthesis      (mol[CO2] m-2 s-1)
+real :: jmaxn   ! Light-saturated e transport           (mol[e] m-2 s-1)
+real :: jn      ! e transport                           (mol[e] m-2 s-1)
+real :: vcmax   ! C3 Vcmax                            (mol[CO2] m-2 s-1)
+real :: vomax   ! C3 Vomax                             (mol[O2] m-2 s-1)
+real :: pcpi    ! Photorespiratory comp. point            (mol[CO2] m-3)
+real :: X       ! Factor for Ci solution
+real :: Z       ! Factor for Ci solution
+real :: alc     ! Factor for Ci solution
+real :: bcarb   ! Factor for Ci solution
+real :: brubp   ! Factor for Ci solution
+real :: ccarb   ! Factor for Ci solution
+real :: crubp   ! Factor for Ci solution
+real :: dum     ! Factor for Ci solution
+real :: q       ! Factor for Ci solution
+real :: ccicarb ! Internal foliage CO2 for Acarb          (mol[CO2] m-3)
+real :: ccirubp ! Internal foliage CO2 for ARuBP          (mol[CO2] m-3)
+real :: acarb   ! Carboxylation-limited net phot.     (mol[CO2] m-2 s-1)
+real :: arubp   ! RuBP-limited net phot.              (mol[CO2] m-2 s-1)
+real :: cffol   ! Canopy carbon balance                (kg[C] ind-1 s-1)
+real :: cfwood  ! Structure carbon balance             (kg[C] ind-1 s-1)
+real :: cffiner ! Fine root carbon balance             (kg[C] ind-1 s-1)
+real :: cflux   ! Individual carbon balance            (kg[C] ind-1 s-1)
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Loop over plots in grid-box.
+!----------------------------------------------------------------------!
 do kp = 1, nplots
- ! Kinetic parameters in air space equivalents (mol[CO2] m-3).
+
+ !---------------------------------------------------------------------!
+ ! Obtain plot number (plot)
+ !---------------------------------------------------------------------!
+ p = p_plot (land_index(i,j),kp)
+ !---------------------------------------------------------------------!
+
+ !---------------------------------------------------------------------!
+ ! Kinetic parameters in air space equivalents (mol[CO2/O2] m-3).
+ !---------------------------------------------------------------------!
  kci = 1.9925e15 * exp (- 10127.01  / tfolK (kp)) / tfolK (kp)
  koi = 2.4239e6  * exp (- 1828.1536 / tfolK (kp)) / tfolK (kp)
+ !---------------------------------------------------------------------!
+
+ !---------------------------------------------------------------------!
  ! Rubisco oxygenation turnover number (klco) is temperature
  ! dependent.
- klco = 4.397e07 * exp (- 5292.02 / tfolK (kp))
+ !---------------------------------------------------------------------!
+ klco = 4.397e07 * exp (- 5292.02 / tfolK (kp)) 
+ !---------------------------------------------------------------------!
+ 
+ !---------------------------------------------------------------------!
  ! Rubisco carboxylation turnover number (klcc) is temperature
  ! dependent.
+ !---------------------------------------------------------------------!
  klcc = 2.897e14 * exp (- 9862.41 / tfolK (kp))
+ !---------------------------------------------------------------------!
+
+ !---------------------------------------------------------------------!
  ! Light saturated rate of electron transport (mol mol(chl)-1 s-1).
+ !---------------------------------------------------------------------!
  c = 3.486e13 * exp (- 9561.7 / tfolK (kp))
  d = one + exp (78.178 - 23934.4 / tfolK (kp))
  jlcmaxn = c / d
+ !---------------------------------------------------------------------!
+
+ !---------------------------------------------------------------------!
  ! Factors for Ci solution in PGEN.
+ !---------------------------------------------------------------------!
  v = kci * (one + 8.471 / koi)
- Y = 1.231e-7 * tfolK (kp)
- do ki = 1, nind (i,j,kp)
-  !---------------------------------------------------------------!
+ y = 1.231e-7 * tfolK (kp)
+ !---------------------------------------------------------------------!
+
+ !---------------------------------------------------------------------!
+ ! Loop over individuals in plot.
+ !---------------------------------------------------------------------!
+ do ki = 1, nind (p)
+ 
+  !--------------------------------------------------------------------!
   ! Get index of individual.
-  !---------------------------------------------------------------!
+  !--------------------------------------------------------------------!
   k = k_ind (land_index(i,j),kp,ki)
+  !--------------------------------------------------------------------!
+  
+  !--------------------------------------------------------------------!
+  ! Do stuff only if alive.
+  !--------------------------------------------------------------------!
   if (alive (k) == 1) then
+
+   !-------------------------------------------------------------------!
+   ! Get GPT index.
+   !-------------------------------------------------------------------!
    ksp = kspp (k)
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   ! Calculate foliage carbon balance.
+   !-------------------------------------------------------------------!
    if ((cfoliage (k) > eps) .and. (et_cat (k) > eps)) then
+   
+    !------------------------------------------------------------------!
+    ! Calculate photosynthesis if light.
+    !------------------------------------------------------------------!
     if (radpar > zero) then
+    
+     !-----------------------------------------------------------------!
+     ! PAR absorbed by upper layer of individual  (mol[photons] m-2 s-1)
+     !-----------------------------------------------------------------!
      par = radpar * ipfact (k)
-     !------------------------------------------------------------!
+     !-----------------------------------------------------------------!
+     
+!PGEN
+     !-----------------------------------------------------------------!
      ! efact allows for effect of transpiration on movement of CO2
      ! molecules.
+     !-----------------------------------------------------------------!
      efact = 2.462e-7 * tfolK (kp)
+     !-----------------------------------------------------------------!
+     
+     !-----------------------------------------------------------------!
+     ! C4 photosynthesis.
+     !-----------------------------------------------------------------!
      if (ksp == 2) then ! C4 (uses Collatz et al., 1992).
-      ! Vcmax at 25 oC (mol m-2 s-1).
+     
+      !----------------------------------------------------------------!
+      ! Vcmax at 25 oC                                (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
       vmaxo = 1.248 * et_cat (k)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
       ! Q10 2 response.
+      !----------------------------------------------------------------!
       tfac = 2 ** ((tfolK (kp) - 298.15) / 10.0)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Numerator for Vcmax 
+      !----------------------------------------------------------------!
       num = vmaxo * tfac
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Denominator for Vcmax.
+      !----------------------------------------------------------------!
       den = (one + exp (0.3 * (286.15 - tfolK (kp)))) * &
             (one + exp (0.3 * (tfolK (kp) - 309.15)))
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Vcmax                                         (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
       vmax = num / den
-	  kt = 18000.0 * vmax
-	  cair = P_Pa / (R * tfolK (kp))
-          rch = one / gc (k)
-          rd = 0.021 * vmax
-	  num = 2.0 * rch * rd - rch * efact * ccair + 2.0 * ccair
-          den = 2.0 + rch * efact + 2.0 * rch * kt / cair
-          ci = num / den
-	  ai = alphas * par - rd
-          ac = kt * ci / cair - rd
-          ae = vmax - rd
-	  ! Find limiting rate.
-          A = ai
-          IF (ac < A) A = ac
-          IF (ae < A) A = ae
-	 else ! C3.
-	  ! Light saturated rate of electron transport (mol m-2 s-1).
-          jmaxn = jmaxfn (k) * jlcmaxn
-	  ! Rate of electron transport (mol m-2 s-1).
-          jn = jmaxn * radpar / (par + 2.1 * jmaxn)
-	  ! Maximum rate of carboxylation by Rubisco depends on klcc
-	  ! and leaf catalytic site content.
-          vcmax = klcc * et_cat (k)
-	  ! Dark respiration after Collatz et al. (1991)
-	  ! (mol CO2 m-2 s-1).
-          rd = 0.015 * vcmax
-	  ! Maximum rate of oxygenation by Rubisco depends on klco and
-	  ! leaf catalytic site content content
-	  vomax = klco * et_cat (k)
-	  ! Photorespiratory compensation point (mol m-3, air space).
-          pcpi = 0.5 * vomax * kci * 8.471 / (vcmax * koi)
-	  ! Now analytically solve for the two Cc,i values.
-          ! Calculate initial variables.
-          X = jn / 4.5
-          Z = 2.3333 * pcpi
-	  ! alc is the same for all solutions.
-          alc = gc (k) + Y
-	  bcarb = gc (k) * (v - ccair) + Y * (v + ccair) + vcmax - rd
-          brubp = gc (k) * (Z - ccair) + Y * (Z + ccair) + X - rd
-          ccarb = v * ccair * (y - gc (k)) - vcmax * pcpi - rd * v
-          crubp = Z * ccair * (Y - gc (k)) - pcpi * (X + 2.3333 * rd)
-	  ! Stable root solution from Numerical Recipes.
-          dum = sqrt (bcarb * bcarb - 4.0 * alc * ccarb)
-	  ! 'sign (x, y)' returns abs. of x times sign of y.
-          dum = sign (dum, bcarb)
-          q = (-0.5) * (bcarb + dum)
-          ccicarb = max (q / alc, ccarb / q)
-	  dum = sqrt (brubp * brubp - 4.0 * alc * crubp)
-          dum = sign (dum, brubp)
-          q = (-0.5) * (brubp + dum)
-          ccirubp = max (q / alc, crubp / q)
-	  ! Carboxyation-limited net photosynthesis.
-          acarb = gc (k) * (ccair - ccicarb) - &
-	          ((ccair + ccicarb) / 2.0) * efact
-          ! RuBP-regeneration-limited net photosynthesis.
-          arubp = gc (k) * (ccair - ccirubp) - &
-                  ((ccair + ccirubp) / 2.0) * efact
-          ! Non co-limited rate of photosynthesis (mol[CO2] m-2 -s1).
-          A = min (acarb, arubp)
-	  ! Set net photosynthesis to zero if frost.
-	  if (tmind <= zero) A = zero
-	 end if
-	 ! Allow for minimum temperature factor.
-         A = nitf (k) * A
-	 ! Change units from mol[CO2] to kg[C].
-	 A = A * 0.012
-	 ! Canopy carbon balance with light (kg[C] ind-1 s-1).
-	 cffol = A * cfact (k)
-	else
-	 ! Canopy carbon balance with no light (kg[C] ind-1 s-1).
-	 cffol = tfaca1 * nfoliage (k)
-	end if
-       else
-       	! Canopy carbon balance if no foliage (kg[C] ind-1 s-1).
-	cffol = zero
-       end if
-       !---------------------------------------------------------------!
-       ! Structural respiration (kg[C] ind-1 s-1).
-       !---------------------------------------------------------------!
-       if (ksp <= 2) then
-        cfwood = tfaca2 * (lsap (k) + cstore (k))
-       else
-        cfwood = tfaca2 * lsap (k)
-       end if
-       !---------------------------------------------------------------!
-       ! Fine root respiration (kg[C] ind-1 s-1).
-       !---------------------------------------------------------------!
-       cffiner = tfacs * nfiner (k)
-       !---------------------------------------------------------------!
-       ! Individual carbon change (kg[C] ind-1 s-1).
-       !---------------------------------------------------------------!
-       cflux = cffol + cfwood + cffiner
-       !---------------------------------------------------------------!
-       ! Update individual carbon store (kg[C] ind-1).
-       !---------------------------------------------------------------!
-       cstore (k) = cstore (k) + dt * cflux
-       !---------------------------------------------------------------!
-       ! Annual C balance of lowest foliage layer (kg C ind-2 year-1).
-       !---------------------------------------------------------------!
-       ball (k) = ball (k) + dt * ratiol (k) * cffol
-       !---------------------------------------------------------------!
-       ! Grid-box NPP (kg[C] s-1).
-       !---------------------------------------------------------------!
-       NPP_grid (i,j) = NPP_grid (i,j) + cflux
-       !---------------------------------------------------------------!
-       if (local) then
-        mnppsp (ksp) = mnppsp (ksp) + cflux
-       end if
-       end if ! alive
-      end do ! ki
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Factor to calculate Ci (rate of carboxylation?).
+      !----------------------------------------------------------------!
+      kt = 18000.0 * vmax
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Air density                                       (mol[air] m-3)
+      !----------------------------------------------------------------!
+      cair = P_Pa / (R * tfolK (kp))
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Canopy resistance to CO2 diffusion                  (s m[CO2]-1)
+      !----------------------------------------------------------------!
+      rch = one / gc (kp,ki)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Foliage dark respiration                      (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      rd = 0.021 * vmax
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Numerator for Ci calculation.
+      !----------------------------------------------------------------!
+      num = 2.0 * rch * rd - rch * efact * ccair + 2.0 * ccair
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Denominator for Ci calculation.
+      !----------------------------------------------------------------!
+      den = 2.0 + rch * efact + 2.0 * rch * kt / cair
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Ci                                                (mol[CO2] m-3)
+      !----------------------------------------------------------------!
+      ci = num / den
+      !----------------------------------------------------------------!
+      
+      
+      !----------------------------------------------------------------!
+      ! C4 light-limited photosynthesis               (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      ai = alphas * par - rd
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! C4 CO2-limited photosynthesis                 (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      ac = kt * ci / cair - rd
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! C4 Vcmax-limited photosynthesis               (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      ae = vmax - rd
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Find limiting rate.
+      !----------------------------------------------------------------!
+      A = ai
+      if (ac < A) A = ac
+      if (ae < A) A = ae
+      !----------------------------------------------------------------!
+
+     else ! C3.
+     
+      !----------------------------------------------------------------!
+      ! Light saturated rate of electron transport      (mol[e] m-2 s-1)
+      !----------------------------------------------------------------!
+      jmaxn = jmaxfn (k) * jlcmaxn
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Rate of electron transport                      (mol[e] m-2 s-1)
+      !----------------------------------------------------------------!
+      jn = jmaxn * par / (par + 2.1 * jmaxn)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Maximum rate of carboxylation by Rubisco depends on klcc
+      ! and leaf catalytic site content               (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      vcmax = klcc * et_cat (k)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Dark respiration after Collatz et al. (1991)  (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      rd = 0.015 * vcmax
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Maximum rate of oxygenation by Rubisco depends on klco and
+      ! leaf catalytic site content content            (mol[O2] m-2 s-1)
+      !----------------------------------------------------------------!
+      vomax = klco * et_cat (k)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Photorespiratory compensation point               (mol[CO2] m-3)
+      !----------------------------------------------------------------!
+      pcpi = 0.5 * vomax * kci * 8.471 / (vcmax * koi)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Now analytically solve for the two Cc,i values    (mol[CO2] m-3)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Calculate initial variables.
+      !----------------------------------------------------------------!
+      X = jn / 4.5
+      Z = 2.3333 * pcpi
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! alc is the same for all solutions.
+      !----------------------------------------------------------------!
+      alc   = gc (kp,ki) + y
+      bcarb = gc (kp,ki) * (v - ccair) + y * (v + ccair) + vcmax - rd
+      brubp = gc (kp,ki) * (Z - ccair) + y * (Z + ccair) + X - rd
+      ccarb = v * ccair * (y - gc (kp,ki)) - vcmax * pcpi - rd * v
+      crubp = Z * ccair * (y - gc (kp,ki)) - pcpi * (X + 2.3333 * rd)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Stable Ci root solution from Numerical Recipes    (mol[CO2] m-3)
+      !----------------------------------------------------------------!
+      dum = sqrt (bcarb * bcarb - 4.0 * alc * ccarb)
+      ! 'sign (x, y)' returns abs. of x times sign of y.
+      dum = sign (dum, bcarb)
+      q = (-0.5) * (bcarb + dum)
+      ccicarb = max (q / alc, ccarb / q)
+      dum = sqrt (brubp * brubp - 4.0 * alc * crubp)
+      dum = sign (dum, brubp)
+      q = (-0.5) * (brubp + dum)
+      ccirubp = max (q / alc, crubp / q)
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Carboxyation-limited net photosynthesis       (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      acarb = gc (kp,ki) * (ccair - ccicarb) - &
+	      ((ccair + ccicarb) / 2.0) * efact
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! RuBP-regeneration-limited net photosynthesis  (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      arubp = gc (kp,ki) * (ccair - ccirubp) - &
+              ((ccair + ccirubp) / 2.0) * efact
+      !----------------------------------------------------------------!
+      
+      !----------------------------------------------------------------!
+      ! Non co-limited rate of net photosynthesis     (mol[CO2] m-2 s-1)
+      !----------------------------------------------------------------!
+      A = min (acarb, arubp)
+      !----------------------------------------------------------------!
+      
+     end if ! C4 vs. C3.
+     
+     !-----------------------------------------------------------------!
+     ! Allow for minimum temperature factor.
+     !-----------------------------------------------------------------!
+     A = nitf (k) * A
+     !-----------------------------------------------------------------!
+!End PGEN
+
+     !-----------------------------------------------------------------!
+     ! Set net photosynthesis to zero if frost.
+     !-----------------------------------------------------------------!
+     if (tmind <= zero) A = zero
+     !-----------------------------------------------------------------!
+     
+     !-----------------------------------------------------------------!
+     ! Change net photosynthesis units from mol[CO2] to kg[C].
+     !-----------------------------------------------------------------!
+     A = A * 0.012
+     !-----------------------------------------------------------------!
+     
+     !-----------------------------------------------------------------!
+     ! Canopy carbon balance with light                (kg[C] ind-1 s-1)
+     !-----------------------------------------------------------------!
+     cffol = A * cfact (k)
+     !-----------------------------------------------------------------!
+   
+     !-----------------------------------------------------------------!
+     ! Grid-box GPP (kg[C]).
+     !-----------------------------------------------------------------!
+     GPP_grid (i,j) = GPP_grid (i,j) + &
+                      dt * (cffol + rd * cfact (k) * 0.012)
+     if (local) then
+      mgppsp (ksp) = mgppsp (ksp) + &
+                     dt * (cffol + rd * cfact (k) * 0.012)
+     end if
+     !-----------------------------------------------------------------!
+     
+    else ! radpar <= 0
+    
+     !-----------------------------------------------------------------!
+     ! Canopy carbon balance with no light             (kg[C] ind-1 s-1)
+     !-----------------------------------------------------------------!
+     cffol = tfaca1 * nfoliage (k)
+     !-----------------------------------------------------------------!
+    
+    end if ! radpar.
+   
+   else ! No foliage and/or et_cat.
+   
+    !------------------------------------------------------------------!
+    ! Canopy carbon balance if no foliage              (kg[C] ind-1 s-1)
+    cffol = zero
+    !------------------------------------------------------------------!
+    
+   end if ! cfoliage or et_cat.
+   
+   !-------------------------------------------------------------------!
+   ! Structural respiration                            (kg[C] ind-1 s-1)
+   !-------------------------------------------------------------------!
+   if (ksp <= 2) then
+    cfwood = tfaca2 * (lsap (k) + cstore (k))
+   else
+    cfwood = tfaca2 * lsap (k)
+   end if
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   ! Fine root respiration                             (kg[C] ind-1 s-1)
+   !-------------------------------------------------------------------!
+   cffiner = tfacs * nfiner (k)
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   ! Individual carbon change                              (kg[C] ind-1)
+   !-------------------------------------------------------------------!
+   cflux = (cffol + cfwood + cffiner) * dt
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   ! Update individual carbon store                        (kg[C] ind-1)
+   !-------------------------------------------------------------------!
+   cstore (k) = cstore (k) + cflux
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   ! Annual C balance of lowest foliage layer          (kg C ind-2 yr-1)
+   !-------------------------------------------------------------------!
+   ball (k) = ball (k) + ratiol (k) * dt * cffol
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   ! Grid-box NPP (kg[C]).
+   !-------------------------------------------------------------------!
+   NPP_grid (i,j) = NPP_grid (i,j) + cflux
+   !-------------------------------------------------------------------!
+   
+   !-------------------------------------------------------------------!
+   if (local) then
+    mnppsp (ksp) = mnppsp (ksp) + cflux
+   end if
+   !-------------------------------------------------------------------!
+   
+  end if ! alive
+  
+ end do ! ki
+ 
 end do ! kp
+
 end subroutine carbon
+

@@ -3,7 +3,7 @@ subroutine allocate
 use shared
 implicit none
 
-integer :: kp
+integer :: kp,p
 integer :: ki,k1,k2
 integer :: k
 integer :: ksp
@@ -29,11 +29,12 @@ real :: fgr,wgr,rgr
     ! Tree C and N allocation.
     !------------------------------------------------------------------!
     do kp = 1, nplots
+     p = p_plot (land_index(i,j),kp)
      ! Calculate laip.
      k1 = k_ind (land_index(i,j),kp,1)
      k2 = k_ind (land_index(i,j),kp,2)
-     laip (i,j,kp) = farea (k1) + farea (k2)
-     do ki = 3, nind (i,j,kp)
+     laip (p) = farea (k1) + farea (k2)
+     do ki = 3, nind (p)
       k = k_ind (land_index(i,j),kp,ki)
       if (alive (k) == 1) then
       ksp = kspp (k)
@@ -104,9 +105,9 @@ real :: fgr,wgr,rgr
         ! Or, balance cstore on each day. But, problem of not allowing
         ! for respiration components, favouring EVGR at Penn.
         ! Maintain carbon balance by subtracting deficit from soil.
-        Cpa (i,j,kp) = Cpa (i,j,kp) + cwood (k) / area
+        Cpa (p) = Cpa (p) + cwood (k) / area
         cwood (k) = zero
-        Cpa (i,j,kp) = max (eps, Cpa (i,j,kp))
+        Cpa (p) = max (eps, Cpa (p))
         ! Make sure tree dies in mortality, but litter contains all of
         ! the net C and N, allowing for the respiration of C as far as
         ! possible. For convenience, all of C and N put into fine roots.
@@ -279,7 +280,7 @@ real :: fgr,wgr,rgr
       ! New live sapwood mass (kg C).
       lsap  (k) = swood * live (ksp)
       ! Calculate laip.
-      laip (i,j,kp) = laip (i,j,kp) + cfoliage (k) * sla (ksp)
+      laip (p) = laip (p) + cfoliage (k) * sla (ksp)
       ! Set foliage area to zero (kg C).
       farea (k) = zero
       !----------------------------------------------------------------!
@@ -354,8 +355,8 @@ real :: fgr,wgr,rgr
       !-----------------------END OF N ALLOCATION-----------------------
   200 continue !****adf
       end if ! alive
-     end do ! ki = 3, nind (i,j,kp)
-     laip (i,j,kp) = laip (i,j,kp) / area
+     end do ! ki = 3, nind (p)
+     laip (p) = laip (p) / area
     end do ! kp
     !------------------------------------------------------------------!
     ! End of tree C and N allocation.

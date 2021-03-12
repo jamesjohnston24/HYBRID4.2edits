@@ -3,10 +3,11 @@ subroutine nitrogen
 use shared
 implicit none
 
-integer :: kp
+integer :: kp,p
 integer :: ki
 integer :: ksp
 integer :: k
+real :: ftsoil ! N uptake temperature effect            (fraction)
 real :: pptod
 real :: tup
 real :: harea
@@ -27,13 +28,34 @@ pptod = sum (pre (i, j, it-3:it)) / 1000.0
       !-------------------------------------------------------------!
 !----------------------------------------------------------------!
 
+!----------------------------------------------------------------------!
+! Effect of soil temperature on N uptake (m2 kg[C]-1 s-1).
+!----------------------------------------------------------------------!
+ftsoil = (tsoil * (60.0 - tsoil)) / (800.0 * sday)
+ftsoil = max (zero, ftsoil)
+ftsoil = min (one , ftsoil)
+!----------------------------------------------------------------------!
+
 do kp = 1, nplots
+ p = p_plot (land_index(i,j),kp)
+  !---------------------------------------------------------------------!
+ ! Convert soil water to water-filled pore space.
+ ! Assumes micro-pore space = swc and macro-pore space = 42%
+ ! saturation content (from TEM, for loam; Raich et al., 1991).
+ !---------------------------------------------------------------------!
+ if (swct (p) > eps) then
+  wfps (kp) = 100.0 * (soilw1 (p) + soilw2 (p) + &
+    soilw3 (p)) / (1.7241 * swct (p))
+  wfps (kp) = min (100.0, wfps (kp))
+ else
+  wfps (kp) = 0.00001
+ end if
       ! Effect of soil water on N uptake through anaerobic conditions at
       ! high soil water and lack of solution medium at low. Function
       ! for decomposition used. weff is GPT parameter for effect of
       ! soil water saturation on N uptake.
       !----------------------------------------------------------------!
-      if (snmin (i,j,kp) > eps) then
+      if (snmin (p) > eps) then
        if (wfps (kp) < 60.0) then
         fwsoil (:) = exp ((wfps (kp) - 60.0) ** 2 * (-0.00125))
        else
@@ -81,7 +103,7 @@ do kp = 1, nplots
       !----------------------------------------------------------------!
       tup = zero
       !----------------------------------------------------------------!
-      do ki = 1, nind (i,j,kp)
+      do ki = 1, nind (p)
        !---------------------------------------------------------------!
        ! Get index of individual.
        !---------------------------------------------------------------!
@@ -113,15 +135,15 @@ do kp = 1, nplots
        ! check to make sure cannot take up more than is there!
        !---------------------------------------------------------------!
        if ((rnfrac < 0.1) .and. (rnfrac > eps)) then
-        ngains (ki) = cfiner (k) * nupc (ksp) * snmin (i,j,kp) * &
+        ngains (ki) = cfiner (k) * nupc (ksp) * snmin (p) * &
 	             fwsoil (ksp) * ftsoil / rnfrac
         !--------------------------------------------------------------!
         ! For grass, only N available from top layer.
         !--------------------------------------------------------------!
         if (ksp <= 2) then
-	 if (swct (i,j,kp) > eps) then
+	 if (swct (p) > eps) then
           ngains (ki) = ngains (ki) * &
-		       (swc1 (i,j,kp) + swc2 (i,j,kp)) / swct (i,j,kp)
+		       (swc1 (p) + swc2 (p)) / swct (p)
          end if
         end if
        else
@@ -135,7 +157,7 @@ do kp = 1, nplots
        end do ! ki
        !----------------------------------------------------------------!
       if ((sday * tup) > eps) then
-       rat = area * snmin (i,j,kp) / (sday * tup)
+       rat = area * snmin (p) / (sday * tup)
       else
        rat = zero
       end if
@@ -143,7 +165,7 @@ do kp = 1, nplots
       ! Limit N uptake if more than available in plot.
       !----------------------------------------------------------------!
       if (rat < one) then
-       do ki = 1, nind (i,j,kp)
+       do ki = 1, nind (p)
        k = k_ind (land_index(i,j),kp,ki)
        if (alive (k) == 1) then
         ngains (ki) = rat * ngains (ki)
@@ -154,10 +176,10 @@ do kp = 1, nplots
       !----------------------------------------------------------------!
       ! Subtract plant N uptake from soil (kg[N] m-2).
       !----------------------------------------------------------------!
-      snmin (i,j,kp) = snmin (i,j,kp) - sday * tup / area
-      !snmin (i,j,kp) = 0.004 !****adf
+      snmin (p) = snmin (p) - sday * tup / area
+      !snmin (p) = 0.004 !****adf
       !----------------------------------------------------------------!
-      do ki = 1, nind (i,j,kp)
+      do ki = 1, nind (p)
        !---------------------------------------------------------------!
        k = k_ind (land_index(i,j),kp,ki)
        if (alive (k) == 1) then

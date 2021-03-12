@@ -9,6 +9,7 @@ character (len = 250) :: file_name ! Generic filename
 integer :: k
 integer :: ncid
 integer :: varid
+integer :: varid_alive
 integer :: varid_kspp
 integer :: varid_dbh,varid_hdbh
 integer :: varid_cfoliage,varid_cfiner,varid_cstore
@@ -31,14 +32,25 @@ integer :: lon_dimid,lat_dimid
 integer :: lon_varid,lat_varid
 integer :: plot_dimid
 integer :: plot_varid
+integer :: p_dimid
 integer :: ind_p_dimid,ind_t_dimid
 integer :: ind_p_varid,ind_t_varid
 integer :: land_dimid
 integer :: land_varid
+integer :: varid1,varid2,varid3
+integer :: varid_C3GR
+integer :: varid_C4GR
+integer :: varid_BREV
+integer :: varid_BRCD
+integer :: varid_BRDD
+integer :: varid_NLEV
+integer :: varid_NLCD
+integer :: varid_NLDD
 integer, dimension (1) :: dimids_one
 integer, dimension (2) :: dimids_two
 integer, dimension (3) :: dimids_three
 integer, dimension (3) :: dimids_land
+integer, dimension (1) :: dimids_p
 
 if (.NOT. (local)) then
 
@@ -146,6 +158,57 @@ call check (nf90_put_var (ncid, lat_varid, lat))
 call check (nf90_put_var (ncid,    varid1, soilw1))
 call check (nf90_put_var (ncid,    varid2, soilw2))
 call check (nf90_put_var (ncid,    varid3, soilw3))
+!----------------------------------------------------------------------!
+! Close file.
+!----------------------------------------------------------------------!
+call check (nf90_close (ncid))
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Output the global GPP field.
+!----------------------------------------------------------------------!
+file_name = "GPP_grid.nc"
+write (*, *) 'Writing to ', trim (file_name)
+!----------------------------------------------------------------------!
+! Create netCDF dataset and enter define mode.
+!----------------------------------------------------------------------!
+call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+            ncid = ncid))
+!----------------------------------------------------------------------!
+! Define the dimensions.
+!----------------------------------------------------------------------!
+call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
+call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
+!----------------------------------------------------------------------!
+! Define coordinate variables.
+!----------------------------------------------------------------------!
+call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
+            lon_varid))
+call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
+            lat_varid))
+dimids_two = (/ lon_dimid, lat_dimid /)
+!----------------------------------------------------------------------!
+! Assign units attributes to coordinate data.
+!----------------------------------------------------------------------!
+call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
+call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+!----------------------------------------------------------------------!
+! Define variable.
+!----------------------------------------------------------------------!
+call check (nf90_def_var (ncid, "GPP", nf90_float, &
+            dimids_two, varid))
+call check (nf90_put_att (ncid, varid, "units", "kg[C] m-2 yr-1"))
+call check (nf90_put_att (ncid, varid, "_FillValue", fillvalue))
+!----------------------------------------------------------------------!
+! End definitions.
+!----------------------------------------------------------------------!
+call check (nf90_enddef (ncid))
+!----------------------------------------------------------------------!
+! Write data.
+!----------------------------------------------------------------------!
+call check (nf90_put_var (ncid, lon_varid, lon))
+call check (nf90_put_var (ncid, lat_varid, lat))
+call check (nf90_put_var (ncid,     varid, GPP_grid))
 !----------------------------------------------------------------------!
 ! Close file.
 !----------------------------------------------------------------------!
@@ -346,15 +409,35 @@ call check (nf90_def_var (ncid, "Cv_C4GR", nf90_float, &
 call check (nf90_put_att (ncid, varid_C4GR, "units", "kg[C] m-2"))
 call check (nf90_put_att (ncid, varid_C4GR, "_FillValue", fillvalue))
 
+call check (nf90_def_var (ncid, "Cv_BREV", nf90_float, &
+            dimids_two, varid_BREV))
+call check (nf90_put_att (ncid, varid_BREV, "units", "kg[C] m-2"))
+call check (nf90_put_att (ncid, varid_BREV, "_FillValue", fillvalue))
+
 call check (nf90_def_var (ncid, "Cv_BRCD", nf90_float, &
             dimids_two, varid_BRCD))
 call check (nf90_put_att (ncid, varid_BRCD, "units", "kg[C] m-2"))
 call check (nf90_put_att (ncid, varid_BRCD, "_FillValue", fillvalue))
 
+call check (nf90_def_var (ncid, "Cv_BRDD", nf90_float, &
+            dimids_two, varid_BRDD))
+call check (nf90_put_att (ncid, varid_BRDD, "units", "kg[C] m-2"))
+call check (nf90_put_att (ncid, varid_BRDD, "_FillValue", fillvalue))
+
 call check (nf90_def_var (ncid, "Cv_NLEV", nf90_float, &
             dimids_two, varid_NLEV))
 call check (nf90_put_att (ncid, varid_NLEV, "units", "kg[C] m-2"))
 call check (nf90_put_att (ncid, varid_NLEV, "_FillValue", fillvalue))
+
+call check (nf90_def_var (ncid, "Cv_NLCD", nf90_float, &
+            dimids_two, varid_NLCD))
+call check (nf90_put_att (ncid, varid_NLCD, "units", "kg[C] m-2"))
+call check (nf90_put_att (ncid, varid_NLCD, "_FillValue", fillvalue))
+
+call check (nf90_def_var (ncid, "Cv_NLDD", nf90_float, &
+            dimids_two, varid_NLDD))
+call check (nf90_put_att (ncid, varid_NLDD, "units", "kg[C] m-2"))
+call check (nf90_put_att (ncid, varid_NLDD, "_FillValue", fillvalue))
 !----------------------------------------------------------------------!
 ! End definitions.
 !----------------------------------------------------------------------!
@@ -366,8 +449,12 @@ call check (nf90_put_var (ncid, lon_varid, lon))
 call check (nf90_put_var (ncid, lat_varid, lat))
 call check (nf90_put_var (ncid,     varid_C3GR, Cv_C3GR_grid))
 call check (nf90_put_var (ncid,     varid_C4GR, Cv_C4GR_grid))
+call check (nf90_put_var (ncid,     varid_BREV, Cv_BREV_grid))
 call check (nf90_put_var (ncid,     varid_BRCD, Cv_BRCD_grid))
+call check (nf90_put_var (ncid,     varid_BRDD, Cv_BRDD_grid))
 call check (nf90_put_var (ncid,     varid_NLEV, Cv_NLEV_grid))
+call check (nf90_put_var (ncid,     varid_NLCD, Cv_NLCD_grid))
+call check (nf90_put_var (ncid,     varid_NLDD, Cv_NLDD_grid))
 !----------------------------------------------------------------------!
 ! Close file.
 !----------------------------------------------------------------------!
@@ -431,6 +518,7 @@ if (rsf_out) then
  dimids_two   = (/ lon_dimid, lat_dimid /)
  dimids_three = (/ lon_dimid, lat_dimid, plot_dimid /)
  dimids_land  = (/ land_dimid, plot_dimid, ind_p_dimid /)
+ dimids_p     = (/ p_dimid /)
  !---------------------------------------------------------------------!
  ! Assign units attributes to coordinate data.
  !--------------------------------------------------------------------!
@@ -452,45 +540,47 @@ if (rsf_out) then
  call check (nf90_def_var (ncid, "Individual_index", &
   nf90_int, dimids_land, varid_k_ind))
  call check (nf90_def_var (ncid, "Surface_metabolic_organic_C", &
-  nf90_float, dimids_three, varid_Cm))
+  nf90_float, dimids_p, varid_Cm))
  call check (nf90_def_var (ncid, "Surface_structural_organic_C", &
-  nf90_float, dimids_three, varid_Cu))
+  nf90_float, dimids_p, varid_Cu))
  call check (nf90_def_var (ncid, "Soil_metabolic_organic_C", &
-  nf90_float, dimids_three, varid_Cn))
+  nf90_float, dimids_p, varid_Cn))
  call check (nf90_def_var (ncid, "Soil_structural_organic_C", &
-  nf90_float, dimids_three, varid_Cv))
+  nf90_float, dimids_p, varid_Cv))
  call check (nf90_def_var (ncid, "Active_organic_C", &
-  nf90_float, dimids_three, varid_Ca))
+  nf90_float, dimids_p, varid_Ca))
  call check (nf90_def_var (ncid, "Slow_organic_C", &
-  nf90_float, dimids_three, varid_Cs))
+  nf90_float, dimids_p, varid_Cs))
  call check (nf90_def_var (ncid, "Passive_soil_organic_C", &
-  nf90_float, dimids_three, varid_Cpa))
+  nf90_float, dimids_p, varid_Cpa))
  call check (nf90_def_var (ncid, "Surface_metabolic_organic_N", &
-  nf90_float, dimids_three, varid_Nm))
+  nf90_float, dimids_p, varid_Nm))
  call check (nf90_def_var (ncid, "Surface_structural_organic_N", &
-  nf90_float, dimids_three, varid_Nu))
+  nf90_float, dimids_p, varid_Nu))
  call check (nf90_def_var (ncid, "Soil_metabolic_organic_N", &
-  nf90_float, dimids_three, varid_Nn))
+  nf90_float, dimids_p, varid_Nn))
  call check (nf90_def_var (ncid, "Soil_structural_organic_N", &
-  nf90_float, dimids_three, varid_Nv))
+  nf90_float, dimids_p, varid_Nv))
  call check (nf90_def_var (ncid, "Active_organic_N", &
-  nf90_float, dimids_three, varid_Na))
+  nf90_float, dimids_p, varid_Na))
  call check (nf90_def_var (ncid, "Slow_organic_N", &
-  nf90_float, dimids_three, varid_Ns))
+  nf90_float, dimids_p, varid_Ns))
  call check (nf90_def_var (ncid, "Passive_soil_organic_N", &
-  nf90_float, dimids_three, varid_Npa))
+  nf90_float, dimids_p, varid_Npa))
  call check (nf90_def_var (ncid, "Mineral_N", &
-  nf90_float, dimids_three, varid_snmin))
+  nf90_float, dimids_p, varid_snmin))
  call check (nf90_def_var (ncid, "Number_individuals_per_plot", &
   nf90_int, dimids_three, varid_nind))
  call check (nf90_def_var (ncid, "Snowpack", &
-  nf90_float, dimids_three, varid_snow))
+  nf90_float, dimids_p, varid_snow))
  call check (nf90_def_var (ncid, "Soil_water_layer_1", &
-  nf90_float, dimids_three, varid_soilw1))
+  nf90_float, dimids_p, varid_soilw1))
  call check (nf90_def_var (ncid, "Soil_water_layer_2", &
-  nf90_float, dimids_three, varid_soilw2))
+  nf90_float, dimids_p, varid_soilw2))
  call check (nf90_def_var (ncid, "Soil_water_layer_3", &
-  nf90_float, dimids_three, varid_soilw3))
+  nf90_float, dimids_p, varid_soilw3))
+ call check (nf90_def_var (ncid, "Alive", &
+  nf90_int, dimids_one, varid_alive))
  call check (nf90_def_var (ncid, "Species_number", &
   nf90_int, dimids_one, varid_kspp))
  call check (nf90_def_var (ncid, "DBH", &
@@ -544,6 +634,7 @@ if (rsf_out) then
  call check (nf90_put_att (ncid, varid_soilw1  , "units", "m"))
  call check (nf90_put_att (ncid, varid_soilw2  , "units", "m"))
  call check (nf90_put_att (ncid, varid_soilw3  , "units", "m"))
+ call check (nf90_put_att (ncid, varid_alive   , "units", "flag"))
  call check (nf90_put_att (ncid, varid_kspp    , "units", "n"))
  call check (nf90_put_att (ncid, varid_dbh     , "units", "m"))
  call check (nf90_put_att (ncid, varid_hdbh    , "units", "m"))
@@ -595,6 +686,7 @@ if (rsf_out) then
  call check (nf90_put_var (ncid, varid_soilw1, soilw1))
  call check (nf90_put_var (ncid, varid_soilw2, soilw2))
  call check (nf90_put_var (ncid, varid_soilw3, soilw3))
+ call check (nf90_put_var (ncid, varid_alive , alive ))
  call check (nf90_put_var (ncid, varid_kspp  , kspp  ))
  call check (nf90_put_var (ncid, varid_dbh     , dbh))
  call check (nf90_put_var (ncid, varid_hdbh    , hdbh))

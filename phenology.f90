@@ -21,7 +21,7 @@ real :: rat_fol,finc,winc,rinc
 real :: fgr,wgr,rgr
 real :: woff,won
 real :: kzog1,kzog2
-real :: fPARi_ll
+real :: fPARi
 real :: skzo
 real :: kSWzog1,kSWzog2
 real :: skSWzo
@@ -76,7 +76,7 @@ integer :: ktemp
 !----------------------------------------------------------!
 do kp = 1, nplots
  p = p_plot (land_index(i,j),kp)
- do ki = 3, nind (i,j,kp)
+ do ki = 3, nind (p)
   k = k_ind (land_index(i,j),kp,ki)
   if (alive (k) == 1) then
 	ksp = kspp (k)
@@ -172,8 +172,7 @@ do kp = 1, nplots
 	 ! Sum site growth respiration (kg C).
          !----------------------------------------------------------!
          rgs = rgs + fgr + wgr + rgr
-	 if (local) mnppsp (ksp) = mnppsp (ksp) - &
-	                           (fgr + wgr + rgr) / dt
+	 if (local) mnppsp (ksp) = mnppsp (ksp) - (fgr + wgr + rgr)
          !----------------------------------------------------------!
 	 if ((fnneed + rnneed) > navail (k)) then
           nfoliage (k) = nfoliage (k) + rat_fol * navail (k)
@@ -309,14 +308,14 @@ do kp = 1, nplots
          lasa (k) = min (lsave (ksp), lasa (k) * 1.1)
         end if
         !-----------------------------------------------------------!
-	laip (i,j,kp) = laip (i,j,kp) + farea (k)
+	laip (p) = laip (p) + farea (k)
         !-----------------------------------------------------------!
 	! Save foliage area.
         rlold (k) = farea (k)
   end if ! alive
- end do ! ki = 3, nind (i,j,kp)
+ end do ! ki = 3, nind (p)
        !------------------------------------------------------------!
-       laip (i,j,kp) = laip (i,j,kp) / area
+       laip (p) = laip (p) / area
        !------------------------------------------------------------!
        ! Calculate radiation and physiological variables.
        ! Section from phenology.f.
@@ -332,7 +331,7 @@ do kp = 1, nplots
         skzg (i,j,kp) = skzo - (kzog1 + kzog2) + &
                         (kzg (k1) + kzg (k2))
 	! New fPAR of lowest layer.
-        fPARi_ll = one - exp (-skzg (i,j,kp))
+        fPARi = one - exp (-skzg (i,j,kp))
 	kSWzog1 = kSWzg (k1)
         kSWzog2 = kSWzg (k2)
         kSWzg (k1) = ksw (1) * farea (k1) / area
@@ -342,14 +341,14 @@ do kp = 1, nplots
                           (kSWzg (k1) + kSWzg (k2))
 	! New fSW of lowest layer.
         fSWi_phen = one - exp (-skSWzg (i,j,kp))
-	do ki = 1, nind (i,j,kp)
+	do ki = 1, nind (p)
          k = k_ind (land_index(i,j),kp,ki)
 	 if (alive (k) == 1) then
 	 ksp = kspp (k)
 	 ! Individual's fPAR in lowest layer yesterday.
          fPARiio = fPARiig (k)
 	 ! Individual's fPAR in lowest layer today.
-	 fPARiig (k) = fPARi_ll * kzg (k) / skzg (i,j,kp)
+	 fPARiig (k) = fPARi * kzg (k) / skzg (i,j,kp)
          ! Total fPAR of individual today.
          fPAR (k) = fPAR (k) + fPARtg (i,j,kp) * &
                     (fPARiig (k) - fPARiio)
@@ -394,7 +393,7 @@ do kp = 1, nplots
 	 ! Top 90 % of lowest layer.
          top = one - exp (-0.9 * skzg (i,j,kp))
 	 ! Grass basal layer ratio.
-         ratiol (k) = (fPARi_ll - top) / fPARi_ll
+         ratiol (k) = (fPARi - top) / fPARi
 	 ! Factor to calculate grass net photosynthesis from mean
 	 ! rate in upper layer.
          cfact (k) = area * fPAR (k) / kpar (ksp)

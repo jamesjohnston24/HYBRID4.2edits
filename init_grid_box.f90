@@ -9,7 +9,7 @@ implicit none
 !----------------------------------------------------------------------!
 integer :: k
 integer :: ki
-integer :: kp
+integer :: kp,p
 integer :: ksp
 !----------------------------------------------------------------------!
 
@@ -50,7 +50,8 @@ do kp = 1, nplots
   fturn_plot (kp,ksp) = fturn_save (ksp)
  end do ! ksp
 !----------------------------------------------------------------------!
- do ki = 1, nind (i,j,kp)
+ p = p_plot (land_index(i,j),kp)
+ do ki = 1, nind (p)
   k = k_ind (land_index(i,j),kp,ki)
   ball (k) = zero
  end do ! ki
@@ -59,9 +60,13 @@ end do ! kp
 foff (:) = 0
 fon  (:) = 0
 !----------------------------------------------------------------------!
+GPP_grid (i,j) = zero
 NPP_grid (i,j) = zero
 !----------------------------------------------------------------------!
-if (local) mnppsp (:) = zero
+if (local) then
+ mgppsp (:) = zero
+ mnppsp (:) = zero
+end if
 !----------------------------------------------------------------------!
 ! End set zero.
 !----------------------------------------------------------------------!

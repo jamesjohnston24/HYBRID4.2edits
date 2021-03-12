@@ -49,7 +49,7 @@ do kp = 1, nplots
    skSWz (m) = zero
   end do
   ! Foliage area in each layer.
-  do ki = 1, nind (i,j,kp)
+  do ki = 1, nind (p)
    k = k_ind (land_index(i,j),kp,ki)
    if (alive (k)) then
     ksp = kspp (k)
@@ -119,7 +119,7 @@ do kp = 1, nplots
    ! Total fraction of radiation at top of plot absorbed in layer.
    fPARi (m) = (1.0 - eskz (m)) * fPARt (m)
    ! Individual absorptions.
-   do ki = 1, nind (i,j,kp)
+   do ki = 1, nind (p)
     k = k_ind (land_index(i,j),kp,ki)
     if (alive (k)) then
      ! Save species number for easier coding.
@@ -146,7 +146,7 @@ do kp = 1, nplots
   !--------------------------------------------------------------------!
   ! Calculate canopy net photosynthesis and conductance parameters.
   !--------------------------------------------------------------------!
-  do ki = 1, nind (i,j,kp)
+  do ki = 1, nind (p)
    k = k_ind (land_index(i,j),kp,ki)
    if (alive (k)) then
     ksp = kspp (k)

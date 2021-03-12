@@ -22,7 +22,7 @@ real :: ran
      alive (k) = 1
      ! Set number of live individuals in plot to two (for grass).
      in = 2
-     do ki = 3, nind (i,j,kp)
+     do ki = 3, nind (p)
       k = k_ind (land_index(i,j),kp,ki)
       if (alive(k) == 1) then
        !ksp = kspp (k)
@@ -57,8 +57,8 @@ real :: ran
       end if
      end do ! ki
      ! Number of individuals left in plot.
-     !nind (i,j,kp) = in
-     !write(*,*)nind(i,j,kp)
+     !nind (p) = in
+     !write(*,*)nind(p)
     end do ! kp
     !------------------------------------------------------------------!
     ! End of mortality routines.

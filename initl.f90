@@ -1,14 +1,106 @@
+!======================================================================!
 subroutine initl
+!----------------------------------------------------------------------!
 
+!----------------------------------------------------------------------!
+! Initialise and allocate global arrays.
+! Read run control parameters from driver.in.
+! Open diagnostic output files.
+! Read annual CO2 values.
+! Set derived GPT-level parameters.
+! Read initial state from restart file if requested, otherwise
+! Initialise all state variables to standard values.
+! Set variables derived from state variables.
+! Read grid-box ice/water fractions and areas.
+! Read phenology parameters.
+! Set daylengths.
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
 use netcdf
 use mpi
 use shared
-implicit none
+!----------------------------------------------------------------------!
 
-character (len = 250) :: file_name ! Generic filename
-integer, parameter :: fillvalue_int = -99999
-character (len = 100) :: var_name
-character (len =   4) :: char_year
+!----------------------------------------------------------------------!
+implicit none
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Control parameters from driver.in.
+!----------------------------------------------------------------------!
+logical :: rsf_in ! Initialise from restart file?
+logical :: ran_s  ! Noise on initial plot soil C (not use RSF)?
+integer :: imax ! Max. tree density                           (trees/ha)
+real :: lon_w ! Longitude if local simulation             (degrees east)
+real :: lat_w ! Latitude if local simulation             (degrees north)
+real :: iscv  ! Noise on initial plot soil C      (fraction around mean)
+real :: ndepi ! Baseline N dep. rate  (kg[N] ha-1 yr-1 -> kg[N] m-2 d-1)
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Control variables calculated in this subroutine.
+!----------------------------------------------------------------------!
+integer :: i_w,j_w ! Global array indices for local simulation.
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Miscelleous variables used in this subroutine.
+!----------------------------------------------------------------------!
+character (len = 250) :: file_name ! Generic filename.
+character (len = 100) :: var_name  ! Generic variable name.
+character (len =   4) :: char_year ! To hold year as text           (CE)
+integer :: kp           ! Plot number in grid-box                 (plot)
+integer :: ki           ! Individual number in plot                (ind)
+integer :: ksp          ! GPT number                               (GPT)
+integer :: k            ! Individual number in simulation          (ind)
+integer :: p            ! Plot number in simulation               (plot)
+integer :: il           ! Count for land grid-boxes                  (n)
+integer :: m            ! Layer in canopy of plot                    (m)
+integer :: ii,jj        ! To index 1/4-degree cover fractions    (index)
+integer :: nplots_total ! Number of plots in simulation              (n)
+integer :: iregl        ! No. trees to plant in plot of each GPT     (n)
+integer :: ireglc       ! Count of new trees to plant of each GPT    (n)
+integer :: nlayers      ! Number of canopy layers occupied by ind    (n)
+real :: diamw     ! Tree stem inside-bark DBH                        (m)
+real :: warea     ! Tree stem inside-bark transversal area at BH    (m2)
+real :: harea     ! Tree stem heartwood transversal area at BH      (m2)
+real :: tarea     ! Tree stem total transversal area at BH          (m2)
+real :: saparea   ! Tree stem sapwood transversal area at BH        (m2)
+real :: wheight   ! Tree stem inside-bark length                     (m)
+real :: hheight   ! Tree stem heartwood length                       (m)
+real :: theight   ! Tree stem total length                           (m)
+real :: wwood     ! Tree stem inside-bark mass                   (kg[C])
+real :: hwood     ! Tree stem heartwood mass                     (kg[C])
+real :: swood     ! Tree stem sapwood mass                       (kg[C])
+real :: ht        ! Tree stem length                                 (m)
+real :: sow1      ! Soil water in top two layers                     (m)
+real :: sc1       ! Soil water holding capacity of top two layers    (m) 
+real :: sw1       ! Soil water potential of top two layers         (MPa)
+real :: sw2       ! Soil water potential of bottom (third) layer   (MPa)
+real :: fd        ! LAI of individual in each layer             (m2 m-2)
+real :: kf        ! kPAR . fd                                        (-)
+real :: kSWf      ! kSW . fd                                         (-)
+real :: frac      ! Frac. of PAR abs. in layer due to ind.    (fraction)
+real :: fracs     ! Frac. of SW abs. in layer due to ind.     (fraction)
+real :: t_d       ! Dew-point temperature                     (degree C)
+real :: t         ! Temperature                               (degree C)
+real :: eo        ! Penman evaporation from lake              (mm day-1)
+real :: e         ! Vapour pressure                               (mbar)
+real :: pt        ! Annual precipitation                        (m yr-1)
+real :: isc_total ! Total global soil C                          (Pg[C])
+real :: ran       ! Random number                                  (0-1)
+real :: noise     ! Noise on initial soil C of plot              (ratio)
+real :: caod      ! Atmospheric CO2 for input                      (ppm)
+real :: lati      ! Latitude in phenology file           (degrees north)
+real :: loni      ! Longitude in phenology file           (degrees east)
+real :: rltdli    ! Input daylength requirement for CD leaf fall     (s)
+real :: ddreqi    ! Input degree-day requirement for CD leaf out     (s)
+real :: phi       ! Latitude for daylength calculation         (radians)
+real :: rn        ! Climatological day number for dl               (day)
+real :: delta     ! Solar declination for dl                   (radians)
+real :: tn        ! Daylength calculation factor                     (-)
+real :: gn        ! Decimal parts of day                      (fraction)
 integer :: ncid
 integer :: varid
 integer :: plot_dimid, ind_p_dimid, ind_t_dimid
@@ -16,39 +108,10 @@ integer :: plot_varid, ind_p_varid, ind_t_varid
 integer :: lon_dimid, lat_dimid
 integer :: lon_varid, lat_varid
 integer, dimension (2) :: dimids_two
-
-real, parameter :: swpmax = -0.033 ! MPa
-real, parameter :: bsoil = 5.0
-integer :: kp
-integer :: ki
-integer :: ksp
-integer :: k
-integer :: p
-integer :: il
-integer :: m
-integer :: ii,jj ! To index 1/4-degree cover fractions
-integer :: nplots_total
-integer :: iregl,ireglc
-integer :: nlayers
-real :: warea,harea,tarea,saparea
-real :: wheight,hheight,theight
-real :: wwood,hwood,swood
-real :: diamw
-real :: ht
-real :: nfp
-real :: sow1,sc1,sw1,sw2,tr_rat
-real :: fd,kf,kSWf,frac,fracs
-real :: t_d ! Dew-point (degree C)
-real :: t ! Temperature (degree C)
-real :: eo ! Penman evaporation from lake (mm day-1)
-real :: e ! Vapour pressure (mbar)
-real :: pt ! Annual precipitation (m yr-1)
-real :: isc_total ! Total global soil C (Pg[C])
-real :: ran ! Random number (0-1)
-real :: noise ! Noise on initial soil C (ratio)
-real :: caod ! ppm
-real :: lati,loni,rltdli,ddreqi
-real :: phi,rn,delta,tn,gn
+real, dimension (nspp) :: raw ! Canopy bound. layer res. to H2O  (s m-1)
+!----------------------------------------------------------------------!
+! Radiation variables over canopy height.
+!----------------------------------------------------------------------!
 real, dimension (mh+1) :: fPARt
 real, dimension (mh+1) :: fSWt
 real, dimension (mh+1) :: fPARi
@@ -57,138 +120,204 @@ real, dimension (mh+1) :: skz
 real, dimension (mh+1) :: skSWz
 real, dimension (mh+1) :: eskz
 real, dimension (mh+1) :: eskSWz
-real, allocatable, dimension (:,:) :: isc ! Initial soil C (kg[C] m-2)
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Parameters used in this subroutine.
+!----------------------------------------------------------------------!
+integer, parameter :: fillvalue_int = -99999 ! Integer fill value    (-)
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Local global fields.
+!----------------------------------------------------------------------!
+real, allocatable, dimension (:,:) :: isc      ! Init soil C (kg[C] m-2)
 real, allocatable, dimension (:,:) :: isc_grid ! Init soil C (kg[C] m-2)
-real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water fraction
-real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area (km2)
-
+real, allocatable, dimension (:,:) :: icwtr_qd ! Ice/water    (fraction)
+real, allocatable, dimension (:,:) :: larea_qd ! Grid-box area     (km2)
 !----------------------------------------------------------------------!
-! Variables from 'driver.in'.
-!----------------------------------------------------------------------!
-real :: lon_w
-real :: lat_w
-!****adflogical :: rsf_in  ! Start from restart file?
-!****adflogical :: ran_s   ! Noise on initial soil C across plots?
-!****adfreal?integer :: iscv    ! Range of initial soil C (+/-fraction)
-!****adfinteger :: syr     ! Start year of simulation (>= 1901)
-!****adfinteger :: eyr     ! End year of simulation (<= 2019)
-integer :: imax    ! Max. tree density (tree/ha)
-!----------------------------------------------------------------------!
-!****adfinteger :: limp     ! Max. trees/plot
-!----------------------------------------------------------------------!
-! Indices of local site, if used.
-!----------------------------------------------------------------------!
-!****adfinteger :: i_w
-!****adfinteger :: j_w
-!----------------------------------------------------------------------!
-! Initial total soil C on non-ice/water fraction (kg[C] m-2)
-allocate (isc  (nlon,nlat))
-! Initial total soil C grid-box mean (kg[C] m-2)
-allocate (isc_grid  (nlon,nlat))
-allocate (icwtr_qd (2*nlon,2*nlat))
-allocate (larea_qd (2*nlon,2*nlat))
-
-Cn  (:,:,:) = zero
-Cu  (:,:,:) = zero
-Cm  (:,:,:) = zero
-Cv  (:,:,:) = zero
-Ca  (:,:,:) = zero
-Cs  (:,:,:) = zero
-Cpa (:,:,:) = zero
-Nn  (:,:,:) = zero
-Nu  (:,:,:) = zero
-Nm  (:,:,:) = zero
-Nv  (:,:,:) = zero
-Na  (:,:,:) = zero
-Ns  (:,:,:) = zero
-Npa (:,:,:) = zero
-snmin (:,:,:) = zero
-nind (:,:,:) = 0
-land_index (:,:) = 0
-p_plot (:,:) = 0
-k_ind  (:,:,:) = 0
-snow   (:,:,:) = fillvalue
-soilw1 (:,:,:) = fillvalue
-soilw2 (:,:,:) = fillvalue
-soilw3 (:,:,:) = fillvalue
-
-uwind = 5.0
 
 !----------------------------------------------------------------------!
 ! Read simulation control values from 'driver.in'.
 !----------------------------------------------------------------------!
 open (10,file='driver.in',status='old')
-read (10,*) local
-read (10,*) lon_w
-read (10,*) lat_w
-read (10,*) rsf_in
-read (10,*) rsf_out
+read (10,*) local   ! Local (single grid-box) only?               (flag)
+read (10,*) lon_w   ! Longitude if local simulation       (degrees east)
+read (10,*) lat_w   ! Latitude if local simulation       (degrees north)
+read (10,*) rsf_in  ! Input from restart file?
+read (10,*) rsf_out ! Output final state to restart file?         (flag)
 read (10,*) ran_s
-read (10,*) iscv
-read (10,*) syr
-read (10,*) eyr
-read (10,*) nplots
-read (10,*) area
-read (10,*) imax
-read (10,*) idbh
-read (10,*) idbhv
-read (10,*) ndepi
-! Convert from kg[N] ha-1 yr-1 to kg[N] m-2 d-1.
-ndepi = ndepi / (10000.0 * float (nd))
+read (10,*) iscv    ! Noise on initial plot soil C   (frac. around mean)
+read (10,*) syr     ! Start year of simulation                      (CE)
+read (10,*) eyr     ! End year of simulation                        (CE)
+read (10,*) nplots  ! Number of plots per grid-box                   (n)
+read (10,*) area    ! Plot area                                     (m2)
+read (10,*) imax    ! Max. tree density                       (trees/ha)
+read (10,*) idbh    ! Initial tree DBH mean                          (m)
+read (10,*) idbhv   ! Variation around idbh                   (fraction)
+read (10,*) ndepi   ! Baseline N deposition rate       (kg[N] ha-1 yr-1)
 close (10)
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
+! Allocate global arrays.
+!----------------------------------------------------------------------!
+allocate (isc      (nlon,nlat)) ! Init. soil C, land frac.   (kg[C] m-2)
+allocate (isc_grid (nlon,nlat)) ! Init. soil C grid-box mean (kg[C] m-2)
+allocate (icwtr    (nlon,nlat)) ! Ice/water                   (fraction)
+allocate (larea    (nlon,nlat)) ! Grid-box area                    (km2)
+allocate (tmp      (nlon,nlat,ntimes))
+allocate (dswrf    (nlon,nlat,ntimes))
+allocate (pre      (nlon,nlat,ntimes))
+allocate (spfh     (nlon,nlat,ntimes))
+allocate (pres     (nlon,nlat,ntimes))
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Derive maximum number of individuals in each plot (nind_max).
+! Derive total number of plots in simulation (nplots_total).
+!----------------------------------------------------------------------!
 limp = imax * NINT (area) / 10000 ! Max. trees/plotdo kp = 1, nplots
 nind_max = limp + 2                   ! Max. individuals/plot (>1).
+nplots_total = nland_max * nplots
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Allocate plot-level arrays.
+!----------------------------------------------------------------------!
 allocate (p_plot     (nland_max,nplots))
 allocate (k_ind      (nland_max,nplots,nind_max))
+allocate (plot       (nplots))
 allocate (dd_flag    (nplots))
 allocate (phenf      (nplots))
 allocate (swp1       (nplots))
 allocate (swp2       (nplots))
+allocate (outflow    (nplots))
+allocate (wfps       (nplots))
+allocate (tfolK      (nplots))
+allocate (tr_rat     (nplots))
 allocate (fturn_plot (nplots,nspp))
-allocate (lon  (nlon))
-allocate (lat  (nlat))
-allocate (plot (nplots))
-allocate (icwtr (nlon,nlat))
-allocate (larea (nlon,nlat))
-allocate (tmp   (nlon,nlat,ntimes))
-allocate (dswrf (nlon,nlat,ntimes))
-allocate (pre   (nlon,nlat,ntimes))
-allocate (spfh (nlon,nlat,ntimes))
-allocate (pres (nlon,nlat,ntimes))
-allocate (Cm   (nlon,nlat,nplots))
-allocate (Cu   (nlon,nlat,nplots))
-allocate (Cn   (nlon,nlat,nplots))
-allocate (Cv   (nlon,nlat,nplots))
-allocate (Ca   (nlon,nlat,nplots))
-allocate (Cs   (nlon,nlat,nplots))
-allocate (Cpa  (nlon,nlat,nplots))
-allocate (soilC (nlon,nlat,nplots))
-allocate (Nu   (nlon,nlat,nplots))
-allocate (Nm   (nlon,nlat,nplots))
-allocate (Nv   (nlon,nlat,nplots))
-allocate (Nn   (nlon,nlat,nplots))
-allocate (Na   (nlon,nlat,nplots))
-allocate (Ns   (nlon,nlat,nplots))
-allocate (Npa  (nlon,nlat,nplots))
-allocate (snmin (nlon,nlat,nplots))
-allocate (soilN (nlon,nlat,nplots))
-allocate (nind (nlon,nlat,nplots))
-allocate (laip (nlon,nlat,nplots))
-allocate (swct   (nlon,nlat,nplots))
-allocate (snow   (nlon,nlat,nplots))
-allocate (soilw1 (nlon,nlat,nplots))
-allocate (soilw2 (nlon,nlat,nplots))
-allocate (soilw3 (nlon,nlat,nplots))
-allocate (swc1 (nlon,nlat,nplots))
-allocate (swc2 (nlon,nlat,nplots))
-allocate (swc3 (nlon,nlat,nplots))
-allocate (outflow(nplots))
-allocate (wfps   (nplots))
-allocate (tfolK  (nplots))
-allocate (rcstom (nind_max))
+allocate (nind   (nplots_total))
+allocate (soilw1 (nplots_total))
+allocate (soilw2 (nplots_total))
+allocate (soilw3 (nplots_total))
+allocate (snow   (nplots_total))
+allocate (SWf    (nplots_total))
+allocate (wlittc (nplots_total))
+allocate (wlittn (nplots_total))
+allocate (flittc (nplots_total))
+allocate (flittn (nplots_total))
+allocate (rlittc (nplots_total))
+allocate (rlittn (nplots_total))
+allocate (Cm     (nplots_total))
+allocate (Cu     (nplots_total))
+allocate (Cn     (nplots_total))
+allocate (Cv     (nplots_total))
+allocate (Ca     (nplots_total))
+allocate (Cs     (nplots_total))
+allocate (Cpa    (nplots_total))
+allocate (Nu     (nplots_total))
+allocate (Nm     (nplots_total))
+allocate (Nv     (nplots_total))
+allocate (Nn     (nplots_total))
+allocate (Na     (nplots_total))
+allocate (Ns     (nplots_total))
+allocate (Npa    (nplots_total))
+allocate (snmin  (nplots_total))
+allocate (laip   (nplots_total))
+allocate (soilC  (nplots_total))
+allocate (soilN  (nplots_total))
+allocate (swct   (nplots_total))
+allocate (swc1   (nplots_total))
+allocate (swc2   (nplots_total))
+allocate (swc3   (nplots_total))
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Allocate lon/lat arrays.
+!----------------------------------------------------------------------!
+allocate (lon (nlon))
+allocate (lat (nlat))
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Initialise some global indexing arrays.
+!----------------------------------------------------------------------!
+land_index (:,:) = 0 ! Index of land grid-point                  (index)
+p_plot     (:,:) = 0 ! Plot index                                (index)
+k_ind    (:,:,:) = 0 ! Individual index                          (index)
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Initialise plot-level arrays.
+!----------------------------------------------------------------------!
+soilw1 (:) = zero
+soilw2 (:) = zero
+soilw3 (:) = zero
+snow   (:) = zero
+SWf    (:) = zero
+wlittc (:) = zero
+wlittn (:) = zero
+flittc (:) = zero
+flittn (:) = zero
+rlittc (:) = zero
+rlittn (:) = zero
+Cm     (:) = zero
+Cn     (:) = zero
+Cu     (:) = zero
+Cv     (:) = zero
+Ca     (:) = zero
+Cs     (:) = zero
+Cpa    (:) = zero
+Nn     (:) = zero
+Nu     (:) = zero
+Nm     (:) = zero
+Nv     (:) = zero
+Na     (:) = zero
+Ns     (:) = zero
+Npa    (:) = zero
+snmin  (:) = zero
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Convert baseline N deposition from kg[N] ha-1 yr-1 to kg[N] m-2 d-1.
+!----------------------------------------------------------------------!
+ndepi = ndepi / (10000.0 * float (nd))
+!----------------------------------------------------------------------!
+! N deposition at 0 m precipitation (kg[N] m-2 day-1)
+!----------------------------------------------------------------------!
+nf = ndepi
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Read in ice/water fractions for each grid-box, and areas (km2).
+! Water is ocean and freshwater bodies from map.
+!----------------------------------------------------------------------!
+allocate (icwtr_qd (2*nlon,2*nlat)) ! QD ice/water            (fraction)
+allocate (larea_qd (2*nlon,2*nlat)) ! QD grid-box area             (km2)
+file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
+&LUH2_new/staticData_quarterdeg.nc'
+write (*, *) 'Reading from ', trim (file_name)
+call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
+varid = 7
+call check (nf90_get_var (ncid, varid, icwtr_qd))
+varid = 9
+call check (nf90_get_var (ncid, varid, larea_qd))
+call check (nf90_close (ncid))
+!----------------------------------------------------------------------!
+! Input file is 1/4 degree, so gridded to 1/2 degree. Need to invert.
+! Assume no missing values.
+!----------------------------------------------------------------------!
+jj = 1
+do j = 1, nlat
+ ii = 1
+ do i = 1, nlon
+  icwtr (i, nlat-j+1) = sum (icwtr_qd (ii:ii+1, jj:jj+1)) / 4.0
+  larea (i, nlat-j+1) = sum (larea_qd (ii:ii+1, jj:jj+1))
+  ii = ii + 2
+ end do
+ jj = jj + 2
+end do
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
@@ -205,18 +334,18 @@ open (10,file='/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CO2field/global_co2_ann_1700_2019.txt',status='old')
 do kyr = 1700, 2019
  read (10,*) i, caod
- cao   (kyr-1699) = caod / 10.0 ! Pa
+ cao (kyr-1699) = caod / 10.0 ! Pa
 end do
 close (10)
-! N deposition at 0 m precipitation (kg[N] m-2 day-).
-nf = ndepi
 !----------------------------------------------------------------------!
 
+! Initialise GPT-level foliage turnover for each plot. !****adf.
 do kp = 1, nplots
  do ksp = 1, nspp
   fturn_plot (kp,ksp) = fturn (ksp)
  end do ! ksp
 end do ! kp
+
 ! Grass coarse root to fine root biomass ratio.
 crratio (1) = bark (1)
 crratio (2) = bark (2)
@@ -224,7 +353,9 @@ do ksp = 1, nspp
  fturn_save (ksp) = fturn (ksp)
  ! Maximum stomatal conductance factor (m s-1).
  ngr   (ksp) = ngr (ksp) / 41.0
- pruba (ksp) = (one - ao (ksp)) / (one + 12.5 / nrc (ksp))
+ ! Intercept in fraction non-photosynthetic N / foliage N (fraction)
+
+ pruba (ksp) = (one - pruba (ksp)) / (one + 12.5 / nrc (ksp))
  slope (ksp) = 71.4 / (one + 12.5 / nrc (ksp))
  ! Convert to integers for tests.
  weff  (ksp) = nint (weffi  (ksp))
@@ -279,7 +410,7 @@ end if ! local
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-if (rsf_in) then
+if (rsf_in) then ! Input state variables from restart file.
  file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_in.nc'
  write (*,*) 'Reading from ',trim(file_name)
  call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
@@ -287,7 +418,7 @@ if (rsf_in) then
  call check (nf90_inq_dimid(ncid,"ind_total",ind_t_dimid))
  call check (nf90_inquire_dimension(ncid,ind_t_dimid,len=nind_total))
  write(*,*) 'nind_total = ',nind_total
- allocate (ind     (nind_total)) !****adf what is this?
+ allocate (ind     (nind_total)) ! Individual index (index)
  allocate (kspp    (nind_total))
  allocate (dbh     (nind_total))
  allocate (hdbh    (nind_total))
@@ -318,8 +449,7 @@ if (rsf_in) then
  call check (nf90_get_var (ncid, varid, bgs))
  varid = varid + 1
  call check (nf90_get_var (ncid, varid, egs))
- !***p_plot and wlittc as well, etc. litter pools, wlittn, alive
- ! flittc, flittn, rlittc, rlittn
+ !***p_plot?
  varid = varid + 1
  call check (nf90_get_var (ncid, varid, k_ind))
  varid = varid + 1
@@ -363,6 +493,8 @@ if (rsf_in) then
  varid = varid + 1
  call check (nf90_get_var (ncid, varid, soilw3))
  varid = varid + 1
+ call check (nf90_get_var (ncid, varid, alive))
+ varid = varid + 1
  call check (nf90_get_var (ncid, varid, kspp))
  varid = varid + 1
  call check (nf90_get_var (ncid, varid, dbh))
@@ -398,11 +530,12 @@ if (rsf_in) then
  do k = 1, nind_total
   ksp = kspp (k)
   !****adf crratio for grass?
-  lsap (k) = bark (ksp) * cfoliage (k)
   if (ksp <= 2) then
+   lsap (k) = crratio (ksp) * cfoliage (k)
    !****adf not sure if this is not a state var.
    cwood (k) = lsap (k)
   else
+   lsap (k) = bark (ksp) * cfoliage (k)
    theight = ah (ksp) * dbh (k) ** bh (ksp)
    tarea = pi * (dbh (k) / 2.0) ** 2
    cwood (k) = stf (ksp) * formf (ksp) * theight * tarea * woodd (ksp)
@@ -417,7 +550,7 @@ end if
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
-if (.NOT. (rsf_in)) then
+if (.NOT. (rsf_in)) then ! Initialise state variables here.
 
  ! Set soil C, N, water; plot nind; kspp; dbh; hdbh; cfoliage, cfiner,
  ! cstore, nfoliage, nbswood, nheart, navail, nfiner; lasa; nitf; hbc.
@@ -439,21 +572,7 @@ if (.NOT. (rsf_in)) then
  allocate (lsap    (nind_total))
  allocate (cwood   (nind_total))
  allocate (alive   (nind_total))
- nplots_total = nland_max * nplots
- allocate (wlittc (nplots_total))
- allocate (wlittn (nplots_total))
- allocate (flittc (nplots_total))
- allocate (flittn (nplots_total))
- allocate (rlittc (nplots_total))
- allocate (rlittn (nplots_total))
- allocate (SWf    (nplots_total))
  alive (:) = 0
- wlittc (:) = zero
- wlittn (:) = zero
- flittc (:) = zero
- flittn (:) = zero
- rlittc (:) = zero
- rlittn (:) = zero
  cd (:,:) = fillvalue_int
  dd (:,:) = fillvalue
  bgs (:,:) = fillvalue_int
@@ -556,7 +675,7 @@ do kyr = syr, syr
    do i = i1, i2
     if (tmp (i, j, 1) /= fillvalue) then
      il = il + 1
-     land_index (i,j) = il
+     land_index (i,j) = il !****adf do outside kyr loop?
      cd (i,j) = 0
      dd (i,j) = zero
      bgs (i,j) = nd + 1
@@ -568,7 +687,7 @@ do kyr = syr, syr
        t = sum (tmp (i, j, it-3:it)) / 4.0 - tf
        ! Vapour pressure (Pa).
        vap = sum (pres (i, j, it-3:it)) * sum (spfh (i, j, it-3:it)) * &
-             m_air / m_water
+             r_air_water
        ! Vapour pressure (mbar).
        e = vap / 100.0
        e = max (eps, e)
@@ -610,7 +729,7 @@ do kyr = syr, syr
        !---------------------------------------------------------------!
        call random_number (ran)
        !---------------------------------------------------------------!
-       ! iscv is noise in initial soil C.
+       ! iscv is noise in initial soil C (fraction around mean).
        !---------------------------------------------------------------!
        noise = 2.0 * iscv * ran + (1.0 - iscv)
        !---------------------------------------------------------------!
@@ -625,55 +744,54 @@ do kyr = syr, syr
       !----------------------------------------------------------------!
       ! Surface structural litter C and N (kg m-2).
       !----------------------------------------------------------------!
-      Cu  (i, j, kp) = isc (i, j) * noise * 0.5  / 14.34
-      Nu  (i, j, kp) = Cu (i, j, kp) * vu
+      Cu  (p) = isc (i, j) * noise * 0.5  / 14.34
+      Nu  (p) = Cu (p) * vu
       !----------------------------------------------------------------!
       ! Surface metabolic litter C and N (kg m-2).
       !----------------------------------------------------------------!
-      Cm  (i, j, kp) = isc (i, j) * noise * 0.0  / 14.34
-      Nm  (i, j, kp) = Cm (i, j, kp) * vm
+      Cm  (p) = isc (i, j) * noise * 0.0  / 14.34
+      Nm  (p) = Cm (p) * vm
       !----------------------------------------------------------------!
       ! Soil structural C and N (kg m-2).
       !----------------------------------------------------------------!
-      Cv  (i, j, kp) = isc (i, j) * noise * 0.5  / 14.34
-      Nv  (i, j, kp) = Cv (i, j, kp) * vv
+      Cv  (p) = isc (i, j) * noise * 0.5  / 14.34
+      Nv  (p) = Cv (p) * vv
       !----------------------------------------------------------------!
       ! Soil metabolic litter C and N (kg m-2).
       !----------------------------------------------------------------!
-      Cn  (i, j, kp) = isc (i, j) * noise * 0.0  / 14.34
-      Nn  (i, j, kp) = Cn (i, j, kp) * vn
+      Cn  (p) = isc (i, j) * noise * 0.0  / 14.34
+      Nn  (p) = Cn (p) * vn
       !----------------------------------------------------------------!
       ! Surface + soil active (microbe) C and N (kg m-2).
       !----------------------------------------------------------------!
-      Ca  (i, j, kp) = isc (i, j) * noise * 0.34 / 14.34
-      Na  (i, j, kp) = Ca (i, j, kp) * va
+      Ca  (p) = isc (i, j) * noise * 0.34 / 14.34
+      Na  (p) = Ca (p) * va
       !----------------------------------------------------------------!
       ! Slow C and N (kg m-2).
       !----------------------------------------------------------------!
-      Cs  (i, j, kp) = isc (i, j) * noise * 5.0  / 14.34
-      Ns  (i, j, kp) = Cs (i, j, kp) * vs
+      Cs  (p) = isc (i, j) * noise * 5.0  / 14.34
+      Ns  (p) = Cs (p) * vs
       !----------------------------------------------------------------!
       ! Passive C and N (kg m-2).
       !----------------------------------------------------------------!
-      Cpa (i, j, kp) = isc (i, j) * noise * 8.0  / 14.34
-      Npa  (i, j, kp) = Cpa (i, j, kp) * vpa
+      Cpa (p) = isc (i, j) * noise * 8.0  / 14.34
+      Npa  (p) = Cpa (p) * vpa
       !----------------------------------------------------------------!
       ! Mineral N (kg[N] m-2).
       !----------------------------------------------------------------!
-      snmin (i, j, kp) = 0.004
+      snmin (p) = 0.004
       !----------------------------------------------------------------!
       ! No. individual trees + 2 (grass types) in plot.
       !----------------------------------------------------------------!
-      nind (i, j, kp) = 0
+      nind (p) = 0
       !----------------------------------------------------------------!
       ! Plant grass in plots.
       !----------------------------------------------------------------!
       do ki = 1, 2
-       nind (i,j,kp) = nind (i,j,kp) + 1
+       nind (p) = nind (p) + 1
        k = k + 1
        alive (k) = 1
        ksp = ki
-       !ksp = 2 !****adf
        dbh (k) = 0.01 ! LAI of grass
        hbc (k) = 0
        k_ind (land_index(i,j),kp,ki) = k
@@ -703,18 +821,17 @@ do kyr = syr, syr
       !----------------------------------------------------------------!
       ! Plant trees in plots.
       !----------------------------------------------------------------!
-      iregl = ((limp - (nind (i,j,kp) - 2)) / (nspp - 2))
+      iregl = ((limp - (nind (p) - 2)) / (nspp - 2))
       !iregl = min (iregl, 10)
-      if (((nind (i,j,kp) - 2) + iregl * (nspp - 2)) > limp) &
+      if (((nind (p) - 2) + iregl * (nspp - 2)) > limp) &
        iregl = iregl - 1
       if (iregl > 0) then
       ki = 2
-      !****adfdo ksp = 3, nspp
       do ksp = 3, nspp
        do ireglc = 1, iregl
-       nind (i,j,kp) = nind (i,j,kp) + 1
+       nind (p) = nind (p) + 1
        ki = ki + 1
-       !do ki = 3, nind (i,j,kp)
+       !do ki = 3, nind (p)
        !---------------------------------------------------------------!
        k = k + 1
        k_ind (land_index(i,j),kp,ki) = k
@@ -725,7 +842,6 @@ do kyr = syr, syr
        call random_number (ran)
        dbh (k) = idbh * (2.0 * idbhv * ran + (1.0 - idbhv))
        hdbh (k) = zero
-       nfp = 0.02
        diamw = dbh (k) * (one - 2.0 * bark (ksp))
        warea = pi * (0.5 * diamw) ** 2
        harea = pi * (0.5 * hdbh (k)) ** 2
@@ -789,49 +905,49 @@ do kyr = syr, syr
       !----------------------------------------------------------------!
       ! Total soil C (kg[C] m-2).
       !----------------------------------------------------------------!
-      soilC (i,j,kp) = Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + &
-                       Cn (i,j,kp) + Ca (i,j,kp) + Cs (i,j,kp) + &
-                       Cpa (i,j,kp)
+      soilC (p) = Cu (p) + Cm (p) + Cv (p) + &
+                       Cn (p) + Ca (p) + Cs (p) + &
+                       Cpa (p)
       !----------------------------------------------------------------!
       ! Total soil water holding capacity (Eqn. (1) of FW00; m).
       !----------------------------------------------------------------!
-      swct (i,j,kp) = 0.213 + 0.00227 * soilC (i,j,kp)
+      swct (p) = 0.213 + 0.00227 * soilC (p)
       !----------------------------------------------------------------!
       ! Soil water holding capacities of layers (m).
       ! d_one is max. swc of top layer for roots.
       !----------------------------------------------------------------!
-      if (swct (i,j,kp) <= 0.05) then
-       swc1 (i,j,kp) = swct (i,j,kp)
-       swc2 (i,j,kp) = 0.0
-       swc3 (i,j,kp) = 0.0
+      if (swct (p) <= 0.05) then
+       swc1 (p) = swct (p)
+       swc2 (p) = 0.0
+       swc3 (p) = 0.0
       else
-       if (swct (i,j,kp) <= d_one) then
-        swc1 (i,j,kp) = 0.05
-        swc2 (i,j,kp) = swct (i,j,kp) - 0.05
-        swc3 (i,j,kp) = 0.0
+       if (swct (p) <= d_one) then
+        swc1 (p) = 0.05
+        swc2 (p) = swct (p) - 0.05
+        swc3 (p) = 0.0
        else
-        swc1 (i,j,kp) = 0.05
-        swc2 (i,j,kp) = d_one - 0.05
-        swc3 (i,j,kp) = swct (i,j,kp) - d_one
+        swc1 (p) = 0.05
+        swc2 (p) = d_one - 0.05
+        swc3 (p) = swct (p) - d_one
        end if
       end if
       !----------------------------------------------------------------!
       ! Snowpack (m).
       !----------------------------------------------------------------!
-      snow (i,j,kp) = 0.0
+      snow (p) = zero
       !----------------------------------------------------------------!
       ! Soil water (m).
       !----------------------------------------------------------------!
-      soilw1 (i,j,kp) = 0.5 * swc1 (i,j,kp)
-      soilw2 (i,j,kp) = 0.5 * swc2 (i,j,kp)
-      soilw3 (i,j,kp) = 0.5 * swc3 (i,j,kp)
+      soilw1 (p) = 0.5 * swc1 (p)
+      soilw2 (p) = 0.5 * swc2 (p)
+      soilw3 (p) = 0.5 * swc3 (p)
       !----------------------------------------------------------------!
-      !if (local) write (*, *) kp, isc (i, j), Cm (i, j, kp), &
-      ! Cv (i, j, kp), Cn (i, j, kp), Ca (i, j, kp), Cs (i, j, kp), &
-      ! Cpa (i, j, kp)
-      !if (local) write (*, *) kp, isc (i, j), Nm (i, j, kp), &
-      ! Nv (i, j, kp), Nn (i, j, kp), Na (i, j, kp), Ns (i, j, kp), &
-      ! Npa (i, j, kp)
+      !if (local) write (*, *) kp, isc (i, j), Cm (p), &
+      ! Cv (p), Cn (p), Ca (p), Cs (p), &
+      ! Cpa (p)
+      !if (local) write (*, *) kp, isc (i, j), Nm (p), &
+      ! Nv (p), Nn (p), Na (p), Ns (p), &
+      ! Npa (p)
      end do ! kp
     end if ! fillvalue
    end do ! i
@@ -886,7 +1002,6 @@ allocate (gmax   (nind_total))
 allocate (cfact  (nind_total))
 allocate (isfact (nind_total))
 allocate (et_cat (nind_total))
-allocate (gc     (nind_total)) ! really only needed within grid-box
 allocate (ratiol (nind_total))
 allocate (ipfact (nind_total))
 allocate (jmaxfn (nind_total))
@@ -905,6 +1020,7 @@ allocate (rnbswood (nind_total))
 allocate (rnfiner  (nind_total))
 allocate (rlold    (nind_total))
 allocate (farea    (nind_total))
+allocate (gc       (nplots,nind_max))
 allocate (kz       (mh+1,nind_max))
 allocate (kSWz     (mh+1,nind_max))
 !----------------------------------------------------------------------!
@@ -918,37 +1034,37 @@ do j = j1, j2
     !------------------------------------------------------------------!
     ! Total soil C (kg[C] m-2).
     !------------------------------------------------------------------!
-    soilC (i,j,kp) = Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + &
-                     Cn (i,j,kp) + Ca (i,j,kp) + Cs (i,j,kp) + &
-                     Cpa (i,j,kp)
+    soilC (p) = Cu (p) + Cm (p) + Cv (p) + &
+                     Cn (p) + Ca (p) + Cs (p) + &
+                     Cpa (p)
     !------------------------------------------------------------------!
     ! Total soil N (kg[N] m-2).
     !------------------------------------------------------------------!
-    soilN (i,j,kp) = Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + &
-                     Nn (i,j,kp) + Na (i,j,kp) + Ns (i,j,kp) + &
-                     Npa (i,j,kp)
+    soilN (p) = Nu (p) + Nm (p) + Nv (p) + &
+                     Nn (p) + Na (p) + Ns (p) + &
+                     Npa (p)
     !****adf include snmin?
     !------------------------------------------------------------------!
     ! Total soil water holding capacity (Eqn. (1) of FW00; m).
     !------------------------------------------------------------------!
-    swct (i,j,kp) = 0.213 + 0.00227 * soilC (i, j, kp)
+    swct (p) = 0.213 + 0.00227 * soilC (p)
     !------------------------------------------------------------------!
     ! Soil water holding capacities of layers (m).
     ! d_one is max. swc of top layer for roots.
     !------------------------------------------------------------------!
-    if (swct (i,j,kp) <= 0.05) then
-     swc1 (i,j,kp) = swct (i,j,kp)
-     swc2 (i,j,kp) = zero
-     swc3 (i,j,kp) = zero
+    if (swct (p) <= 0.05) then
+     swc1 (p) = swct (p)
+     swc2 (p) = zero
+     swc3 (p) = zero
     else
-     if (swct (i,j,kp) <= d_one) then
-       swc1 (i,j,kp) = 0.05
-       swc2 (i,j,kp) = swct (i,j,kp) - 0.05
-       swc3 (i,j,kp) = zero
+     if (swct (p) <= d_one) then
+       swc1 (p) = 0.05
+       swc2 (p) = swct (p) - 0.05
+       swc3 (p) = zero
      else
-       swc1 (i,j,kp) = 0.05
-       swc2 (i,j,kp) = d_one - 0.05
-       swc3 (i,j,kp) = swct (i,j,kp) - d_one
+       swc1 (p) = 0.05
+       swc2 (p) = d_one - 0.05
+       swc3 (p) = swct (p) - d_one
      end if
     end if
     !****following not needed as loops over sites afterwards
@@ -956,8 +1072,8 @@ do j = j1, j2
     !------------------------------------------------------------------!
     ! Soil water potential top-layer roots (MPa).
     !------------------------------------------------------------------!
-    sow1 = soilw1 (i,j,kp) + soilw2 (i,j,kp)
-    sc1  = swc1   (i,j,kp) + swc2   (i,j,kp)
+    sow1 = soilw1 (p) + soilw2 (p)
+    sc1  = swc1   (p) + swc2   (p)
     if (sow1 > eps) then
      if (sc1 > eps) then
       sw1 = swpmax * (1.0 / ((sow1 / sc1) ** bsoil))
@@ -970,10 +1086,10 @@ do j = j1, j2
     !------------------------------------------------------------------!
     ! Soil water potential for bottom-layer roots (MPa).
     !-----------------------------------------------------------------!
-    if (soilw3 (i,j,kp) > eps) then
-     if (swc3 (i,j,kp) > eps) then
-      sw2 = swpmax * (1.0 / ((soilw3 (i,j,kp) / &
-	    swc3 (i,j,kp)) ** bsoil))
+    if (soilw3 (p) > eps) then
+     if (swc3 (p) > eps) then
+      sw2 = swpmax * (1.0 / ((soilw3 (p) / &
+	    swc3 (p)) ** bsoil))
      else
       sw2 = -100.0
      end if
@@ -990,11 +1106,11 @@ do j = j1, j2
     if (sw1 > sw2) then
      ! All transpiration from top two layers.
      swp2 (kp) = sw1
-     tr_rat = one
+     tr_rat (kp) = one
     else
      ! All transpiration from bottom layer.
      swp2 (kp) = sw2
-     tr_rat = zero
+     tr_rat (kp)  = zero
     end if
     !****above not needed? as loops over sites afterwards
     !****but is same as orig, so maybe needed for first site!
@@ -1011,7 +1127,7 @@ do j = j1, j2
      skSWz (m) = zero
     end do
     ! Foliage area in each layer.
-    do ki = 1, nind (i,j,kp)
+    do ki = 1, nind (p)
      k = k_ind (land_index(i,j),kp,ki)
      ksp = kspp (k)
      ! Set fraction of PAR on top layer absorbed by individual to zero.
@@ -1099,7 +1215,7 @@ do j = j1, j2
      ! Total fraction of radiation at top of plot absorbed in layer.
      fPARi (m) = (1.0 - eskz (m)) * fPARt (m)
      ! Individual absorptions.
-     do ki = 1, nind (i,j,kp)
+     do ki = 1, nind (p)
       k = k_ind (land_index(i,j),kp,ki)
       ! Save species number for easier coding.
       ksp = kspp (k)
@@ -1120,13 +1236,12 @@ do j = j1, j2
       end if
      end do ! ki
     end do ! m
-    !stop
     !------------------------------------------------------------------!
-    laip (i,j,kp) = zero
+    laip (p) = zero
     !------------------------------------------------------------------!
     ! Canopy net photosynthesis and conductance.
     !------------------------------------------------------------------!
-    do ki = 1, nind (i,j,kp)
+    do ki = 1, nind (p)
      k = k_ind (land_index(i,j),kp,ki)
      ksp = kspp (k)
      !-----------------------------------------------------------------!
@@ -1141,10 +1256,10 @@ do j = j1, j2
       rnfiner   (k) = nfiner   (k)
      end if
      !-----------------------------------------------------------------!
-     laip (i,j,kp) = laip (i,j,kp) + farea (k)
+     laip (p) = laip (p) + farea (k)
      !-----------------------------------------------------------------!
     end do ! ki
-    laip (i,j,kp) = laip (i,j,kp) / area
+    laip (p) = laip (p) / area
    end do ! kp
    phenf (:) = 1
    call radiation !****replaces some of above?
@@ -1154,6 +1269,7 @@ end do ! j
 allocate (ball (nind_total))
 allocate (foff (nind_total))
 allocate (fon  (nind_total))
+GPP_grid     (:,:) = fillvalue
 NPP_grid     (:,:) = fillvalue
 Cv_grid      (:,:) = fillvalue
 Cs_grid      (:,:) = fillvalue
@@ -1166,36 +1282,6 @@ summer = .FALSE.
 dd (:,:) = zero
 cd (:,:) = zero
 !----------------------------------------------------------------------!
-
-!----------------------------------------------------------------------!
-! Read in ice/water fractions for each grid-box, and areas (km2).
-! Water is ocean and freshwater bodies from map.
-!----------------------------------------------------------------------!
-file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
-&LUH2_new/staticData_quarterdeg.nc'
-write (*, *) 'Reading from ', trim (file_name)
-call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
-varid = 7
-call check (nf90_get_var (ncid, varid, icwtr_qd))
-varid = 9
-call check (nf90_get_var (ncid, varid, larea_qd))
-call check (nf90_close (ncid))
-!----------------------------------------------------------------------!
-! Input file is 1/4 degree, so gridded to 1/2 degree. Need to invert.
-! Assume no missing values.
-!----------------------------------------------------------------------!
-jj = 1
-do j = 1, nlat
- ii = 1
- do i = 1, nlon
-  icwtr (i, nlat-j+1) = sum (icwtr_qd (ii:ii+1, jj:jj+1)) / 4.0
-  larea (i, nlat-j+1) = sum (larea_qd (ii:ii+1, jj:jj+1))
-  ii = ii + 2
- end do
- jj = jj + 2
-end do
-!----------------------------------------------------------------------!
-
 
 !----------------------------------------------------------------------!
 ! Read phenology parameters for each grid-box.
@@ -1221,9 +1307,9 @@ do j = 1, nlat
  !...phi is latitude (radians)
  phi = pi * abs (lat (j)) / 180.0
  ! Calculate daylength for each yearday.
- do jdl = 1, nd
+ do kday = 1, nd
   ! rn is climatological day number
-  rn = float (jdl)
+  rn = float (kday)
   ! delta is solar declination (radians), depends on time of year.
   ! Calculation taken from Spitters et al., 1986 (Eqn. 16, p. 226).
   delta = asin (-1.0 * sin (23.45 * pi / 180.0) * &
@@ -1242,8 +1328,8 @@ do j = 1, nlat
     gn = one
    end if
   end if
-  dl (j,jdl) = gn * sday
- end do ! jdl
+  dl (j,kday) = gn * sday
+ end do ! kday
  ! Invert if in southern hemisphere.
  if (lat (j) < zero) then
   do kday = 0, nd
@@ -1267,3 +1353,4 @@ contains
 !----------------------------------------------------------------------!
 
 end subroutine initl
+!======================================================================!

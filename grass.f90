@@ -18,6 +18,7 @@ real :: grg
 real :: rnmax,rnlose,rnsave
 
 do kp = 1, nplots
+ p = p_plot (land_index(i,j),kp)
  do ki = 1, 2
   k = k_ind (land_index(i,j),kp,ki)
   ksp = kspp (k)
@@ -39,7 +40,7 @@ do kp = 1, nplots
          !----------------------------------------------------------!
 	 ! Grass daily C and N  litter (kg day-1).
          !----------------------------------------------------------!
-         flitterc = fturn_plot (kp,ksp) * cfoliage (k)
+	 flitterc = fturn_plot (kp,ksp) * cfoliage (k)
          rlitterc = rturn (ksp) * cfiner (k)
          wlitterc = wturn (ksp) * lsap (k)
          flittern = frcoeff (ksp) * fturn_plot (kp,ksp) * &
@@ -120,7 +121,7 @@ do kp = 1, nplots
          grg = (one - rgf (ksp)) * max (zero, (csn - cso))
          grg = min (lsap (k), grg)
          rgs = rgs + grg
-	 if (local) mnppsp (ksp) = mnppsp (ksp) - grg / dt
+	 if (local) mnppsp (ksp) = mnppsp (ksp) - grg
          !----------------------------------------------------------!
 	 farea (k) = cfoliage (k) * sla (ksp)
          !----------------------------------------------------------!
@@ -164,14 +165,14 @@ do kp = 1, nplots
          ctn = cfoliage (k) + lsap (k) + cfiner (k) + cstore (k) + &
 	       grg
          if (cto /= ctn) then
-          Cpa (i,j,kp) = Cpa (i,j,kp) - (ctn - cto) / area
-          Cpa (i,j,kp) = max (Cpa (i,j,kp), eps)
+          Cpa (p) = Cpa (p) - (ctn - cto) / area
+          Cpa (p) = max (Cpa (p), eps)
          end if
          !----------------------------------------------------------!
        end do ! ki
        k1 = k_ind (land_index(i,j),kp,1)
        k2 = k_ind (land_index(i,j),kp,2)
-       laip (i,j,kp) = farea (k1) + farea (k2)
+       laip (p) = farea (k1) + farea (k2)
       end do ! kp
       
 end subroutine grass

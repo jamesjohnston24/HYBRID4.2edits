@@ -81,13 +81,14 @@ real :: Usoil
  ! Assumes micro-pore space = swc and macro-pore space = 42%
  ! saturation content (from TEM, for loam; Raich et al., 1991).
  !---------------------------------------------------------------------!
- if (swct (i,j,kp) > eps) then
-  wfps (kp) = 100.0 * (soilw1 (i,j,kp) + soilw2 (i,j,kp) + &
-    soilw3 (i,j,kp)) / (1.7241 * swct (i,j,kp))
-  wfps (kp) = min (100.0, wfps (kp))
- else
-  wfps (kp) = 0.00001
- end if
+ ! Moved to nitrogen.f90 as needed there first.
+ !if (swct (p) > eps) then
+ ! wfps (kp) = 100.0 * (soilw1 (p) + soilw2 (p) + &
+ !   soilw3 (p)) / (1.7241 * swct (p))
+ ! wfps (kp) = min (100.0, wfps (kp))
+ !else
+ ! wfps (kp) = 0.00001
+ !end if
        !---------------------------------------------------------------!
        ! Soil-water decomposition modifer (fraction). Equations are 
        ! fitted to Fig. 8 of Williams et al. (1992).
@@ -136,13 +137,13 @@ real :: Usoil
        d6p = ev * d6pb
        d7p = ev * d7pb
        ! C decays (kg[C] m-2 day-1).
-       d1C = d1p * Cu  (i,j,kp)
-       d2C = d2p * Cm  (i,j,kp)
-       d3C = d3p * Cv  (i,j,kp)
-       d4C = d4p * Cn  (i,j,kp)
-       d5C = d5p * Ca  (i,j,kp)
-       d6C = d6p * Cs  (i,j,kp)
-       d7C = d7p * Cpa (i,j,kp)
+       d1C = d1p * Cu  (p)
+       d2C = d2p * Cm  (kp)
+       d3C = d3p * Cv  (p)
+       d4C = d4p * Cn  (p)
+       d5C = d5p * Ca  (p)
+       d6C = d6p * Cs  (p)
+       d7C = d7p * Cpa (p)
        ! C fluxes between litter pools.
        dCu = puf * flittc (p) + wlittc (p) - d1C
        dCm = pmf * flittc (p)               - d2C
@@ -166,116 +167,116 @@ real :: Usoil
        ! N flux from root litter to soil metabolic.
        Nnr = rlittn (p) - vv * Jv
        ! N fluxes between litter pools.
-       dNu = vu * Ju - d1p * Nu (i,j,kp)
-       dNm = NmfNmw  - d2p * Nm (i,j,kp)
-       dNv = vv * Jv - d3p * Nv (i,j,kp)
-       dNn = Nnr     - d4p * Nn (i,j,kp)
+       dNu = vu * Ju - d1p * Nu (p)
+       dNm = NmfNmw  - d2p * Nm (p)
+       dNv = vv * Jv - d3p * Nv (p)
+       dNn = Nnr     - d4p * Nn (p)
        ! Constrained forms, if required.
-       if ((Cm (i,j,kp) + dCm) > eps) then
-        temp = (Nm (i,j,kp) + dNm) / (Cm (i,j,kp) + dCm)
+       if ((Cm (p) + dCm) > eps) then
+        temp = (Nm (p) + dNm) / (Cm (p) + dCm)
        else
 	temp = one
        end if
        if (temp < (one / 25.0)) then
         vm = one / 25.0
         NmfNmw = vm * pmf * flittc (p)
-        dNm    = NmfNmw - d2p * Nm (i,j,kp)
+        dNm    = NmfNmw - d2p * Nm (p)
        end if
        if (temp > (one / 10.0)) then
         vm = one / 10.0
         NmfNmw = vm * pmf * flittc (p)
-        dNm    = NmfNmw - d2p * Nm (i,j,kp)
+        dNm    = NmfNmw - d2p * Nm (p)
        end if
-       if ((Cn (i,j,kp) + dCn) > eps) then
-        temp = (Nn (i,j,kp) + dNn) / (Cn (i,j,kp) + dCn)
+       if ((Cn (p) + dCn) > eps) then
+        temp = (Nn (p) + dNn) / (Cn (p) + dCn)
        else
         temp = one
        end if
        if (temp < (one / 25.0)) then
         vn = one / 25.0
         Nnr    = vn * pnr * rlittc (p)
-        dNn    = Nnr    - d4p * Nn (i,j,kp)
+        dNn    = Nnr    - d4p * Nn (p)
        end if
        if (temp > (one / 10.0)) then
         vn = one / 10.0
         Nnr    = vn * pnr * rlittc (p)
-        dNn    = Nnr    - d4p * Nn (i,j,kp)
+        dNn    = Nnr    - d4p * Nn (p)
        end if
        ! N fluxes between soil pools.
-       dNa  = va  * Ja  - d5p * Na  (i,j,kp)
-       dNs  = vs  * Js  - d6p * Ns  (i,j,kp)
-       dNpa = vpa * Jpa - d7p * Npa (i,j,kp)
+       dNa  = va  * Ja  - d5p * Na  (p)
+       dNs  = vs  * Js  - d6p * Ns  (p)
+       dNpa = vpa * Jpa - d7p * Npa (p)
        ! Inital total C.
        C0 = flittc (p) + wlittc (p) + rlittc (p) + &
-            Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + Cn (i,j,kp) + &
-            Ca (i,j,kp) + Cs (i,j,kp) + Cpa (i,j,kp)
+            Cu (p) + Cm (p) + Cv (p) + Cn (p) + &
+            Ca (p) + Cs (p) + Cpa (p)
        ! Initial total N.
        N0 = flittn (p) + wlittn (p) + rlittn (p) + &
-            Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + Nn (i,j,kp) + &
-            Na (i,j,kp) + Ns (i,j,kp) + Npa (i,j,kp)
+            Nu (p) + Nm (p) + Nv (p) + Nn (p) + &
+            Na (p) + Ns (p) + Npa (p)
        ! Update C pools.
        ! Surface structural litter.
-       Cu (i,j,kp) = Cu (i,j,kp) + dCu
+       Cu (p) = Cu (p) + dCu
        ! Surface metabolic litter.
-       Cm (i,j,kp) = Cm (i,j,kp) + dCm
+       Cm (p) = Cm (p) + dCm
        ! Soil structural litter.
-       Cv (i,j,kp) = Cv (i,j,kp) + dCv
+       Cv (p) = Cv (p) + dCv
        ! Soil metabolic litter.
-       Cn (i,j,kp) = Cn (i,j,kp) + dCn
+       Cn (p) = Cn (p) + dCn
        ! Active.
-       Ca (i,j,kp) = Ca (i,j,kp) + dCa
+       Ca (p) = Ca (p) + dCa
        ! Slow.
-       Cs (i,j,kp) = Cs (i,j,kp) + dCs
+       Cs (p) = Cs (p) + dCs
        ! Passive.
-       Cpa (i,j,kp) = Cpa (i,j,kp) + dCpa
+       Cpa (p) = Cpa (p) + dCpa
        ! Following does not appear to be used.
        Cleach = dCle
        ! Update N pools.
-       Nu (i,j,kp) = Nu (i,j,kp) + dNu
-       Nm (i,j,kp) = Nm (i,j,kp) + dNm
-       Nv (i,j,kp) = Nv (i,j,kp) + dNv
-       Nn (i,j,kp) = Nn (i,j,kp) + dNn
-       Na (i,j,kp) = Na (i,j,kp) + dNa
-       Ns (i,j,kp) = Ns (i,j,kp) + dNs
-       Npa (i,j,kp) = Npa (i,j,kp) + dNpa
+       Nu (p) = Nu (p) + dNu
+       Nm (p) = Nm (p) + dNm
+       Nv (p) = Nv (p) + dNv
+       Nn (p) = Nn (p) + dNn
+       Na (p) = Na (p) + dNa
+       Ns (p) = Ns (p) + dNs
+       Npa (p) = Npa (p) + dNpa
        ! Total soil C (kg[C] m-2).
-       soilC (i,j,kp) = Cu (i,j,kp) + Cm (i,j,kp) + Cv (i,j,kp) + &
-                        Cn (i,j,kp) + Ca (i,j,kp) + Cs (i,j,kp) + &
-			Cpa (i,j,kp)
-       soilN (i,j,kp) = Nu (i,j,kp) + Nm (i,j,kp) + Nv (i,j,kp) + &
-                        Nn (i,j,kp) + Na (i,j,kp) + Ns (i,j,kp) + &
-			Npa (i,j,kp)
+       soilC (p) = Cu (p) + Cm (p) + Cv (p) + &
+                        Cn (p) + Ca (p) + Cs (p) + &
+			Cpa (p)
+       soilN (p) = Nu (p) + Nm (p) + Nv (p) + &
+                        Nn (p) + Na (p) + Ns (p) + &
+			Npa (p)
 			
        ! N mineralization rate (kg[N] m-2 day-1).
-       Nmin = N0 - soilN (i,j,kp)
+       Nmin = N0 - soilN (p)
        ! Production rate of plant-available N (kg[N] m-2 day-1).
        Usoil = (one - emf) * (Nmin + Nad + Nfx + Ndepo)
        ! Soil respiration (kg[C] m-2 day-1).
-       !****adfsresp = C0 - (soilC (i,j,kp) + dCle)
-       snmin (i,j,kp) = snmin (i,j,kp) + Usoil
+       !****adfsresp = C0 - (soilC (p) + dCle)
+       snmin (p) = snmin (p) + Usoil
        !---------------------------------------------------------------!
        ! Soil water holding capacity (Eqn. (1) of FW00; m).
        !---------------------------------------------------------------!
-       swct (i,j,kp) = 0.213 + 0.00227 * soilC (i,j,kp)
+       swct (p) = 0.213 + 0.00227 * soilC (p)
        !---------------------------------------------------------------!
        
        !---------------------------------------------------------------!
        ! Soil water holding capacities of layers (m).
        ! d_one is max. swc of top layer for roots.
        !---------------------------------------------------------------!
-       if (swct (i,j,kp) <= 0.05) then
-        swc1 (i,j,kp) = swct (i,j,kp)
-        swc2 (i,j,kp) = 0.0
-        swc3 (i,j,kp) = 0.0
+       if (swct (p) <= 0.05) then
+        swc1 (p) = swct (p)
+        swc2 (p) = 0.0
+        swc3 (p) = 0.0
        else
-        if (swct (i,j,kp) <= d_one) THEN
-          swc1 (i,j,kp) = 0.05
-          swc2 (i,j,kp) = swct (i,j,kp) - 0.05
-          swc3 (i,j,kp) = 0.0
+        if (swct (p) <= d_one) THEN
+          swc1 (p) = 0.05
+          swc2 (p) = swct (p) - 0.05
+          swc3 (p) = 0.0
         else
-          swc1 (i,j,kp) = 0.05
-          swc2 (i,j,kp) = d_one - 0.05
-          swc3 (i,j,kp) = swct (i,j,kp) - d_one
+          swc1 (p) = 0.05
+          swc2 (p) = d_one - 0.05
+          swc3 (p) = swct (p) - d_one
         end if
        end if
        wlittc (p) = zero
