@@ -1,6 +1,6 @@
 .FALSE. ! local   ! Local (single grid-box) only?                 (flag)
--70.0   ! lon_w   ! Longitude if local simulation         (degrees east)
- -3.0   ! lat_w   ! Latitude if local simulation         (degrees north)
+ 0.108  ! lon_w   ! Longitude if local simulation         (degrees east)
+52.198  ! lat_w   ! Latitude if local simulation         (degrees north)
 .FALSE. ! rsf_in  ! Initialise from restart file?
 .FALSE. ! rsf_out ! Output final state to restart file?           (flag)
 .TRUE.  ! ran_s   ! Noise on initial plot soil C (not use RSF)?
@@ -9,7 +9,7 @@
 1910    ! eyr     ! End year of simulation                          (CE)
 1       ! nplots  ! Number of plots per grid-box                     (n)
 200.0   ! area    ! Plot area                                       (m2)
-500     ! imax (10000->200/plot; 500->10)
+2000    ! imax (10000->200/plot; 2000->40; 500->10)
 0.001   ! idbh    ! Initial tree DBH mean                            (m)
 0.9     ! idbhv   ! Variation around idbh                     (fraction)
 10.0    ! ndepi (kg[N] ha-1 yr-1 - > kg[N] m-2 d-1)
@@ -33,15 +33,32 @@
 !----------------------------------------------------------------------!
 ! Manaus.
 !----------------------------------------------------------------------!
-!real, parameter :: lon_w = -60.035
-!real, parameter :: lat_w =  -3.053
+-60.035 ! lon_w   ! Longitude if local simulation         (degrees east)
+ -3.053 ! lat_w   ! Latitude if local simulation         (degrees north)
 !----------------------------------------------------------------------!
 ! Cambridge.
 !----------------------------------------------------------------------!
-!real, parameter :: lon_w =  0.108
-!real, parameter :: lat_w = 52.198
+ 0.108  ! lon_w   ! Longitude if local simulation         (degrees east)
+52.198  ! lat_w   ! Latitude if local simulation         (degrees north)
 !----------------------------------------------------------------------!
 ! Mali.
 !----------------------------------------------------------------------!
-!real, parameter :: lon_w =  0.0
-!real, parameter :: lat_w = 21.0
+ 0.0    ! lon_w   ! Longitude if local simulation         (degrees east)
+21.0    ! lat_w   ! Latitude if local simulation         (degrees north)
+!----------------------------------------------------------------------!
+! Uruguay.
+!----------------------------------------------------------------------!
+-50.16  ! lon_w   ! Longitude if local simulation         (degrees east)
+-27.26  ! lat_w   ! Latitude if local simulation         (degrees north)
+!----------------------------------------------------------------------!
+! N. Nigeria.
+!----------------------------------------------------------------------!
+ 4.6    ! lon_w   ! Longitude if local simulation         (degrees east)
+13.0    ! lat_w   ! Latitude if local simulation         (degrees north)
+!----------------------------------------------------------------------!
+! C. China.
+!----------------------------------------------------------------------!
+112.3   ! lon_w   ! Longitude if local simulation         (degrees east)
+29.88   ! lat_w   ! Latitude if local simulation         (degrees north)
+!----------------------------------------------------------------------!
+

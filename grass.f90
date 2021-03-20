@@ -31,7 +31,7 @@ do kp = 1, nplots
 	 ! Could put in temperature limitation to growth here.
 	 ! Also, could make this reduction proportional to LAI.
          !----------------------------------------------------------!
-         if (ball (k) < zero) then
+	 if (ball (k) < zero) then
           maxcf = 0.9 * cfoliage (k)
          else
           maxcf = cfoliage (k) * 10.0

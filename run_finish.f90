@@ -106,62 +106,62 @@ call check (nf90_close (ncid))
 !----------------------------------------------------------------------!
 ! Output global soil water fields.
 !----------------------------------------------------------------------!
-file_name = "Soil_water_grid.nc"
-write (*, *) 'Writing to ', trim (file_name)
+!file_name = "Soil_water_grid.nc"
+!write (*, *) 'Writing to ', trim (file_name)
 !----------------------------------------------------------------------!
 ! Create netCDF dataset and enter define mode.
 !----------------------------------------------------------------------!
-call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
-            ncid = ncid))
+!call check (nf90_create (trim (file_name), cmode = nf90_clobber, &
+!            ncid = ncid))
 !----------------------------------------------------------------------!
 ! Define the dimensions.
 !----------------------------------------------------------------------!
-call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
-call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
+!call check (nf90_def_dim (ncid, "longitude", nlon, lon_dimid))
+!call check (nf90_def_dim (ncid, "latitude" , nlat, lat_dimid))
 !----------------------------------------------------------------------!
 ! Define coordinate variables.
 !----------------------------------------------------------------------!
-call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
-            lon_varid))
-call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
-            lat_varid))
-dimids_two = (/ lon_dimid, lat_dimid /)
+!call check (nf90_def_var (ncid, "longitude", nf90_float, lon_dimid, &
+!            lon_varid))
+!call check (nf90_def_var (ncid, "latitude" , nf90_float, lat_dimid, &
+!            lat_varid))
+!dimids_two = (/ lon_dimid, lat_dimid /)
 !----------------------------------------------------------------------!
 ! Assign units attributes to coordinate data.
 !----------------------------------------------------------------------!
-call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
-call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
+!call check (nf90_put_att (ncid, lon_varid, "units", "degrees_east"))
+!call check (nf90_put_att (ncid, lat_varid, "units", "degrees_north"))
 !----------------------------------------------------------------------!
 ! Define variables.
 !----------------------------------------------------------------------!
-call check (nf90_def_var (ncid, "Soil_water1", nf90_float, &
-            dimids_two, varid1))
-call check (nf90_put_att (ncid, varid1, "units", "m"))
-call check (nf90_put_att (ncid, varid1, "_FillValue", fillvalue))
-call check (nf90_def_var (ncid, "Soil_water2", nf90_float, &
-            dimids_two, varid2))
-call check (nf90_put_att (ncid, varid2, "units", "m"))
-call check (nf90_put_att (ncid, varid2, "_FillValue", fillvalue))
-call check (nf90_def_var (ncid, "Soil_water3", nf90_float, &
-            dimids_two, varid3))
-call check (nf90_put_att (ncid, varid3, "units", "m"))
-call check (nf90_put_att (ncid, varid3, "_FillValue", fillvalue))
+!call check (nf90_def_var (ncid, "Soil_water1", nf90_float, &
+!            dimids_two, varid1))
+!call check (nf90_put_att (ncid, varid1, "units", "m"))
+!call check (nf90_put_att (ncid, varid1, "_FillValue", fillvalue))
+!call check (nf90_def_var (ncid, "Soil_water2", nf90_float, &
+!            dimids_two, varid2))
+!call check (nf90_put_att (ncid, varid2, "units", "m"))
+!call check (nf90_put_att (ncid, varid2, "_FillValue", fillvalue))
+!call check (nf90_def_var (ncid, "Soil_water3", nf90_float, &
+!            dimids_two, varid3))
+!call check (nf90_put_att (ncid, varid3, "units", "m"))
+!call check (nf90_put_att (ncid, varid3, "_FillValue", fillvalue))
 !----------------------------------------------------------------------!
 ! End definitions.
 !----------------------------------------------------------------------!
-call check (nf90_enddef (ncid))
+!call check (nf90_enddef (ncid))
 !----------------------------------------------------------------------!
 ! Write data.
 !----------------------------------------------------------------------!
-call check (nf90_put_var (ncid, lon_varid, lon))
-call check (nf90_put_var (ncid, lat_varid, lat))
-call check (nf90_put_var (ncid,    varid1, soilw1))
-call check (nf90_put_var (ncid,    varid2, soilw2))
-call check (nf90_put_var (ncid,    varid3, soilw3))
+!call check (nf90_put_var (ncid, lon_varid, lon))
+!call check (nf90_put_var (ncid, lat_varid, lat))
+!call check (nf90_put_var (ncid,    varid1, soilw1))
+!call check (nf90_put_var (ncid,    varid2, soilw2))
+!call check (nf90_put_var (ncid,    varid3, soilw3))
 !----------------------------------------------------------------------!
 ! Close file.
 !----------------------------------------------------------------------!
-call check (nf90_close (ncid))
+!call check (nf90_close (ncid))
 !----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!

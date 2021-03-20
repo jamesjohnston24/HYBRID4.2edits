@@ -3,10 +3,12 @@ subroutine regen
 use shared
 implicit none
 
+integer :: nregen = 10 ! Max no. new trees/yr.
 integer :: kp,p
 integer :: ki
 integer :: ksp
 integer :: k
+integer :: new
 real :: ran
 real :: diamt,diamw,diamh
 real :: tarea  ,warea  ,harea
@@ -22,7 +24,7 @@ real :: ht
     !------------------------------------------------------------------!
     do kp = 1, nplots
      p = p_plot (land_index(i,j),kp)
-     !****adf for now just fill gaps
+     !****adf for now just fill gaps, up to 10/yr
      ! Number of each spp. to add to get max. density.
      !iregl = ((limp - (nind (p) - 2)) / (nspp - 2))
      !iregl = min (iregl, 10)
@@ -30,11 +32,17 @@ real :: ht
      !     iregl = iregl - 1
      !write(*,*)'iregl nind =',iregl,nind(p)
      !if (iregl > 0) then
-     ksp = 3 !****adf should alter each yr
+     new = 0
      do ki = 1, nind (p)
       k = k_ind (land_index(i,j),kp,ki)
-      if (alive (k) == 0) then ! plant a tree
+      if ((alive (k) == 0) .and. (new < nregen)) then ! plant a tree
+       new = new + 1
        alive (k) = 1
+       ! Specify new tree GPT (random).
+       call random_number (ran)
+       ksp = nint (ran * 6.0 + 0.5) + 2
+       ksp = max (3,ksp)
+       ksp = min (nspp,ksp)
        call random_number (ran)
        dbh (k) = idbh * (2.0 * idbhv * ran + (1.0 - idbhv))
        hdbh (k) = zero

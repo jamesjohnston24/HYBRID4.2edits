@@ -1,63 +1,108 @@
+!======================================================================!
 subroutine hydrology
+!----------------------------------------------------------------------!
 
+!----------------------------------------------------------------------!
+! Computes N uptake temperature effect (why here?).
+! Computes effect soil water potential for each individual.
+! Computes stomatal conductance for each individual.
+! Computes canopy temperature for each plot.
+! Updates soil water in each layer and snowpack.
+! Computes proportion of water lost as outflow.
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
 use shared
-implicit none
+!----------------------------------------------------------------------!
 
-integer :: kp
-integer :: ki
-integer :: p
-integer :: k
-integer :: ksp
-real, parameter :: cp   = 1012.0
-real, parameter :: ftmin = 0.0
-real, parameter :: ftmax = 40.0
-real, parameter :: fkfive = 18.35
+!----------------------------------------------------------------------!
+implicit none
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Parameters only used in this subroutine.
+!----------------------------------------------------------------------!
+real, parameter :: cp = 1012.0 ! Sp. heat capacity of air   (J kg-1 K-1)
+real, parameter :: ftmin  = 0.0   ! Parameter for ft                (oC)
+real, parameter :: ftmax  = 40.0  ! Parameter for ft                (oC)
+real, parameter :: fkfive = 18.35 ! Parameter for ft                (oC)
 real, parameter :: fkeight = (ftmax - fkfive) / (fkfive - ftmin)
 real, parameter :: intc   = 0.0005 * dt / sday ! m LAI-1 dt-1
 real, parameter :: smeltc = 0.0007 * dt / sday ! m oC-1 dt-1
-real, parameter :: fout   = 0.9 ! fraction
-real, dimension (nind_max) :: rcstom
-real :: rhoa
-real :: lambda
-real :: gamma
-real :: gammas
-real :: ef1
-real :: ts
-real :: psinf
-real :: cwsta
-real :: cwstl
-real :: cwa
-real :: dwo
-real :: s
-real :: fdq,ft,fdqftfc
-real :: tt
-real :: sow1
-real :: sc1
-real :: sw1,sw2
-real :: swp3
-real :: tr_grass,tr_tot
-real :: psin
-real :: cgc
-real :: st ! SW radiation absorbed in upper crown layer (W m-2)
-real :: fst,fdt
-real :: gs
-real :: rwi,rw,raws,rsoil
-real :: betae
-real :: veg_frac
-real :: rcif,rci,rcn
-real :: cwstf
-real :: vpd
-real :: ET,Ek
-real :: lmbae
-real :: transp
-real :: pint,aint
-real :: pevap,pevap1,aevap,aevapr
-real :: srain
-real :: snowi
-real :: smelt
-real :: transp1,transp2,transp3
-real :: out1,out2,outt
-real :: ploss
+real, parameter :: fout   = 0.9    * dt / sday ! fraction dt-1
+!----------------------------------------------------------------------!
+
+!----------------------------------------------------------------------!
+! Miscellaneous variables used in this subroutine.
+!----------------------------------------------------------------------!
+integer :: kp  ! Plot number in grid-box                          (plot)
+integer :: p   ! Plot number in simulation                        (plot)
+integer :: ki  ! Individual number in plot                         (ind)
+integer :: k   ! Individual number in simulation                   (ind)
+integer :: ksp ! GPT number                                        (GPT)
+!----------------------------------------------------------------------!
+real, dimension (nind_max) :: rcstom ! Stomatal res. to CO2 (m[CO2] s-1)
+!----------------------------------------------------------------------!
+real :: rhoa   ! Density of dry air                        (kg[air] m-3)
+real :: lambda ! Latent heat of vapourisation of H2O            (J kg-1)
+real :: gamma  ! Psychrometer 'constant'                   (mol m-3 K-1)
+real :: gammas ! Adjusted psychrometer `constant'          (mol m-3 K-1)
+real :: ef1    ! Leaf temperature calculation factor           (mol J-1)
+real :: ts     ! Apparent radiative temperature of atmosphere        (K)
+real :: psinf  ! Isothermal net radiation factor                 (W m-2)
+real :: cwsta  ! Saturation conc'n of water at air temperature (mol m-3)
+real :: cwstl  ! Saturation conc'n of water close to air temp. (mol m-3)
+real :: cwa    ! Conc'n of water vapour in air outside LBL     (mol m-3)
+real :: dwo    ! Water vapour conc'n deficit of air outside BL (mol m-3)
+real :: s      ! Slope of saturation vapour pressure curve (mol m-3 K-1)
+real :: fdq    ! Humidity stomatal cond. response function    (fraction)
+real :: ft     ! Temperature stomatal conductance response    (fraction)
+real :: fdqftfc ! Stom. factor to allow for vpd, temp., CO2   (fraction)
+real :: tt     ! Factor to calculate fdqftfc
+real :: sow1   ! Soil water in top two layers                        (m)
+real :: sc1    ! Soil water holding capacity in top two layers       (m)
+real :: sw1    ! Soil water potential of top two layers            (MPa)
+real :: sw2    ! Soil water potential of lowest layer              (MPa)
+real :: tr_grass ! Plot conductance for grass transpiration (m[H2O] s-1)
+real :: tr_tot ! Plot conductance for total transpiration   (m[H2O] s-1)
+real :: psin   ! Total plot isoth. net rad. on ground area basis (W m-2)
+real :: cgc    ! Total canopy conductance                   (m[H2O] s-1)
+real :: st     ! SW radiation absorbed in upper crown layer      (W m-2)
+real :: fst    ! Stomatal conductance solar-radiation factor  (fraction)
+real :: fdt    ! Stomatal conductance soil-water factor       (fraction)
+real :: gs     ! Stomatal conductance to H2O          (mol[H2O] m-2 s-1)
+real :: rwi    ! Total res. across LBL and leaf surface     (s m[H2O]-1)
+real :: rw     ! rwi on ground area basis                   (m[H2O] s-1)
+real :: raws   ! BL conductance to water of bare ground     (m[H2O] s-1)
+real :: rsoil  ! Resistance to water loss of bare ground    (m[H2O] s-1)
+real :: betae  ! Soil water control on rsoil                  (fraction)
+real :: veg_frac ! Vegetation canopy fraction of plot         (fraction)
+real :: rcif   ! Baseline res. from leaf surface to mesophyll (s m[CO2])
+real :: rci    ! Resistance from leaf surface to mesophyll    (s m[CO2])
+real :: rcn    ! Resistance from outside LBL to mesophyll     (s m[CO2])
+real :: cwstf  ! Saturation conc'n of water at leaf temp' (mol[H2O] m-3)
+real :: vpd    ! Canopy-to-air water vapour deficit       (mol[H2O] m-3)
+real :: ET     ! Rate of transpiration from plot      (mol[H2O] m-2 s-1)
+real :: Ek     ! Rate of transpiration from plot      (kg[H2O] m-2 dt-1)
+real :: lmbae  ! Mean energy used in transpiration               (W m-2)
+real :: transp ! Plot transpiration, assuming 1 g = 1 cm-3 (m[H2O] dt-1)
+real :: pint   ! Potential interception                         (m dt-1)
+real :: aint   ! Actual interception                            (m dt-1)
+real :: pevap  ! Potential evaporation                          (m dt-1)
+real :: pevap1 ! Potential evaporation                (mol[H2O] m-2 s-1)
+real :: aevap  ! Actual evaporated intercepted rain             (m dt-1)
+real :: aevapr ! Actual evaporated intercepted rain   (kg[H2O] m-2 dt-1)
+real :: srain  ! Total rain reaching soil                       (m dt-1)
+real :: snowi  ! Snow                                           (m dt-1)
+real :: smelt  ! Snowmelt                                       (m dt-1)
+real :: transp1 ! Transpiration from first soil layer           (m dt-1)
+real :: transp2 ! Transpiration from second soil layer          (m dt-1)
+real :: transp3 ! Transpiration from third soil layer           (m dt-1)
+real :: out1   ! Outflow from first to second layer             (m dt-1)
+real :: out2   ! Outflow from second to third layer             (m dt-1)
+real :: outt   ! Outflow from plot                              (m dt-1)
+real :: ploss  ! Outflow as proportion of plot water          (fraction)
+!----------------------------------------------------------------------!
 
 !----------------------------------------------------------------------!
 ! Density of dry air (kg m-3).
@@ -69,7 +114,7 @@ rhoa = 2.42 - 4.12e-3 * tairK
 !-----------------------------------------------------------------!
 lambda = 3.15e+6 - 2.375e+3 * tairK
 !-----------------------------------------------------------------!
-! Psychrometer 'constant' (mol m-3 K-1).
+! Psychrometeric 'constant' (mol m-3 K-1).
 !-----------------------------------------------------------------!
 gamma = 1.983e7 / (lambda * tairK)
 !-----------------------------------------------------------------!
@@ -210,7 +255,7 @@ do kp = 1, nplots
    !-------------------------------------------------------------------!
    rwi = (0.607 * rac (ksp) + one / gs) * area / cfact (k)
    !-------------------------------------------------------------------!
-   ! Sum canopy conductance across individuals (m[H2O s-1).
+   ! Sum canopy conductance across individuals (m[H2O] s-1).
    !-------------------------------------------------------------------!
    cgc = cgc + one / rwi
    !-------------------------------------------------------------------!
@@ -220,6 +265,8 @@ do kp = 1, nplots
    if (ki <= 2) tr_grass = tr_grass + one / rwi
    !-------------------------------------------------------------------!
   end if
+  else
+   rcstom (ki) = one / eps
   end if ! alive
  end do ! ki
  !---------------------------------------------------------------------!
@@ -308,6 +355,8 @@ do kp = 1, nplots
   ! (m s-1), used in PGEN.
   gc (kp,ki) = one / rcn
   !--------------------------------------------------------------------!
+  else
+   gc (kp,ki) = eps
   end if ! alive
  end do ! ki
  !---------------------------------------------------------------------!
@@ -355,7 +404,7 @@ do kp = 1, nplots
   pevap1 = ((s * psin + rhoa * cp * dwo / rhr (1)) / &
  (s + gammas)) / (m_water * lambda / 1.0e3)
   ! Convert from mol m-2 s-1 to m dt-1.
-  pevap = dt * pevap1 * m_water / 1.0e6
+  pevap = 0.001 * dt * pevap1 * m_water / 1.0e3
   pevap = max (zero, pevap)
   ! Actual evaporated intercepted rain (m dt-1).
   aevap = min (pevap, aint)
@@ -438,7 +487,7 @@ do kp = 1, nplots
  outflow (kp) = outflow (kp) + outt
  ! Subtract outflow from soil water in third layer.
  soilw3 (p) = soilw3 (p) - outt
- !...Proportion of water lost as outflow (fraction)
+ ! Proportion of water lost as outflow (fraction)
  if ((soilw1 (p) + soilw2 (p) + soilw3 (p) + &
   outt) > eps) then
   ploss = outt / (soilw1 (p) + soilw2 (p) + &

@@ -167,7 +167,7 @@ do kp = 1, nplots
      tnfact = max (one, tnfact)
      ! If foliage in top leaf is too high, reduce foliage N. Assume
      ! extra N just not used for photosynthesis.
-     ! IF (tnfact . 2.0) tnfact = 2.0
+     ! IF (tnfact > 2.0) tnfact = 2.0
      nit = tnfact * nfoliage (k) / farea (k)
      ! nit = min (4.0e-3, nit)
      ! Proportion of N bound in Rubisco in upper layer.

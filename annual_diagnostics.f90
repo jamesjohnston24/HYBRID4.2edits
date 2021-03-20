@@ -10,6 +10,7 @@ integer :: ksp
 integer, dimension (nspp) :: ntreessp
 real   , dimension (nspp) :: mlaisp
 real   , dimension (nspp) :: mheightsp
+integer, dimension (nspp) :: mxhsp
 
 !----------------------------------------------------------------------!
 do j = j1, j2
@@ -143,9 +144,10 @@ if (local) then
  write (*,*) 'kyr Cv_NLCD_grid  ',kyr,Cv_NLCD_grid (i1,j1),'kg[C] m-2'
  write (*,*) 'kyr Cv_NLDD_grid  ',kyr,Cv_NLDD_grid (i1,j1),'kg[C] m-2'
  write (*,*) 'kyr LAI_grid      ',kyr,LAI_grid(i1,j1),'m2 m-2'
- ntreessp (:) = 0
- mlaisp (:) = zero
+ ntreessp  (:) = 0
+ mlaisp    (:) = zero
  mheightsp (:) = zero
+ mxhsp     (:) = 0
  do kp = 1, nplots
   p = p_plot (land_index(i1,j1),kp)
   do ki = 1, nind (p)
@@ -155,22 +157,24 @@ if (local) then
     ntreessp  (ksp) = ntreessp (ksp) + 1
     mlaisp    (ksp) = mlaisp (ksp) + cfoliage (k) * sla (ksp)
     mheightsp (ksp) = mheightsp (ksp) + height (k)
+    if (height (k) > mxhsp (ksp)) mxhsp (ksp) = height (k)
    end if ! alive
   end do ! ki
  end do ! kp
- write (*,*) ' ksp ntrees/plot      LAI         height&
- &      GPP         NPP'
+ write (*,*) ' ksp ntrees/plot         LAI      mean H  max H&
+ &         GPP         NPP'
  do ksp = 1, nspp
   if (ntreessp (ksp) > 0) then
-   write (*,'(i5,5f12.4)') ksp,ntreessp(ksp)/float(nplots),&
+   write (*,'(i5,3f12.4,i7,2f12.4)') ksp,ntreessp(ksp)/float(nplots),&
                mlaisp(ksp)/(area*float(nplots)), &
  	       mheightsp(ksp)/float(ntreessp(ksp)), &
+	       mxhsp(ksp), &
 	       mgppsp(ksp)/(area*float(nplots)), &
 	       mnppsp(ksp)/(area*float(nplots))
   else
-   write (*,'(i5,5f12.4)') ksp,ntreessp(ksp)/float(nplots),&
+   write (*,'(i5,3f12.4,i7,2f12.4)') ksp,ntreessp(ksp)/float(nplots),&
                mlaisp(ksp)/(area*float(nplots)), &
- 	       0.0,mgppsp(ksp)/(area*float(nplots)),&
+ 	       0.0,0,mgppsp(ksp)/(area*float(nplots)),&
 	       mnppsp(ksp)/(area*float(nplots))
   end if
  end do

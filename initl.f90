@@ -529,10 +529,8 @@ if (rsf_in) then ! Input state variables from restart file.
  allocate (cwood (nind_total))
  do k = 1, nind_total
   ksp = kspp (k)
-  !****adf crratio for grass?
   if (ksp <= 2) then
    lsap (k) = crratio (ksp) * cfoliage (k)
-   !****adf not sure if this is not a state var.
    cwood (k) = lsap (k)
   else
    lsap (k) = bark (ksp) * cfoliage (k)
