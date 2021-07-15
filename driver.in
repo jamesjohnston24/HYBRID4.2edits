@@ -1,13 +1,13 @@
-.FALSE. ! local   ! Local (single grid-box) only?                 (flag)
+.TRUE.  ! local   ! Local (single grid-box) only?                 (flag)
  0.108  ! lon_w   ! Longitude if local simulation         (degrees east)
 52.198  ! lat_w   ! Latitude if local simulation         (degrees north)
 .FALSE. ! rsf_in  ! Initialise from restart file?
-.FALSE. ! rsf_out ! Output final state to restart file?           (flag)
+.TRUE.  ! rsf_out ! Output final state to restart file?           (flag)
 .TRUE.  ! ran_s   ! Noise on initial plot soil C (not use RSF)?
 0.1     ! iscv    ! Noise on initial plot soil C  (fraction around mean)
 1901    ! syr     ! Start year of simulation                        (CE)
 1910    ! eyr     ! End year of simulation                          (CE)
-1       ! nplots  ! Number of plots per grid-box                     (n)
+20      ! nplots  ! Number of plots per grid-box                     (n)
 200.0   ! area    ! Plot area                                       (m2)
 2000    ! imax (10000->200/plot; 2000->40; 500->10)
 0.001   ! idbh    ! Initial tree DBH mean                            (m)
