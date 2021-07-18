@@ -480,7 +480,7 @@ if (rsf_out) then
 
  !----------------------------------------------------------------------!
  file_name = &
-            "/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_out.nc"
+            "/home/jhj34/rds/rds-mb425-geogscratch/adf10/RSF/rsf_out.nc"
  write (*, *) 'Writing to ', trim (file_name)
  !---------------------------------------------------------------------!
  ! Create netCDF dataset and enter define mode.
