@@ -295,7 +295,7 @@ nf = ndepi
 !----------------------------------------------------------------------!
 allocate (icwtr_qd (2*nlon,2*nlat)) ! QD ice/water            (fraction)
 allocate (larea_qd (2*nlon,2*nlat)) ! QD grid-box area             (km2)
-file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
+file_name = '/home/jhj34/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
 &LUH2_new/staticData_quarterdeg.nc'
 write (*, *) 'Reading from ', trim (file_name)
 call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
@@ -330,7 +330,7 @@ open (20,file='annual_global.dat',status='unknown')
 ! Read annual global CO2 mixing ratios (ppm -> Pa).
 ! Do everything here that is in co2.f of original code.
 !----------------------------------------------------------------------!
-open (10,file='/home/adf10/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
+open (10,file='/home/jhj34/rds/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CO2field/global_co2_ann_1700_2019.txt',status='old')
 do kyr = 1700, 2019
  read (10,*) i, caod
@@ -411,7 +411,7 @@ end if ! local
 
 !----------------------------------------------------------------------!
 if (rsf_in) then ! Input state variables from restart file.
- file_name = '/home/adf10/rds/rds-mb425-geogscratch/adf10/RSF/rsf_in.nc'
+ file_name = '/home/jhj34/rds/rds-mb425-geogscratch/adf10/RSF/rsf_in.nc'
  write (*,*) 'Reading from ',trim(file_name)
  call check (nf90_open (trim (file_name), nf90_nowrite, ncid))
  ! Get number of individuals.
@@ -586,7 +586,7 @@ do kyr = syr, syr
  ! Read global temperature fields for year kyr into tmp (K).
  !---------------------------------------------------------------------!
  var_name = 'tmp'
- file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+ file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
  &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
  &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
  write (*,*) 'Reading from ',trim(file_name)
@@ -606,7 +606,7 @@ do kyr = syr, syr
  ! Read precipitation fields for year kyr intp pre (mm 6hr-1).
  !---------------------------------------------------------------------!
  var_name = 'pre'
- file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+ file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
  &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
  &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
  write (*,*) 'Reading from ',trim(file_name)
@@ -619,7 +619,7 @@ do kyr = syr, syr
  ! Read specific humidity fields for year kyr into spfh (kg kg-1).
  !---------------------------------------------------------------------!
  var_name = 'spfh'
- file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+ file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
  &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
  &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
  write (*,*) 'Reading from ',trim(file_name)
@@ -632,7 +632,7 @@ do kyr = syr, syr
  ! Read pressure fields for year kyr intp pres (Pa).
  !---------------------------------------------------------------------!
  var_name = 'pres'
- file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+ file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
  &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
  &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
  write (*,*) 'Reading from ',trim(file_name)

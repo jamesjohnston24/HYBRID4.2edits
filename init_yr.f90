@@ -43,7 +43,7 @@ write (char_year, '(i4)') kyr
 ! Read global temperature fields for year kyr into tmp (K).
 !----------------------------------------------------------------------!
 var_name = 'tmp'
-file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
 &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
 write (*,*) 'Reading from ',trim(file_name)
@@ -58,7 +58,7 @@ call check (nf90_close (ncid))
 ! Read precipitation fields for year kyr intp pre (mm 6hr-1).
 !----------------------------------------------------------------------!
 var_name = 'pre'
-file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
 &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
 write (*,*) 'Reading from ',trim(file_name)
@@ -74,7 +74,7 @@ call check (nf90_close (ncid))
 ! dswrf (J m-2).
 !----------------------------------------------------------------------!
 var_name = 'dswrf'
-file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
 &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
 write (*,*) 'Reading from ',trim(file_name)
@@ -89,7 +89,7 @@ call check (nf90_close (ncid))
 ! Read specific humidity fields for year kyr into spfh (kg kg-1).
 !----------------------------------------------------------------------!
 var_name = 'spfh'
-file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
 &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
 write (*,*) 'Reading from ',trim(file_name)
@@ -104,7 +104,7 @@ call check (nf90_close (ncid))
 ! Read pressure fields for year kyr into pres (Pa).
 !----------------------------------------------------------------------!
 var_name = 'pres'
-file_name = '/rds/user/adf10/rds-mb425-geogscratch/adf10/FORCINGS/&
+file_name = '/rds/user/jhj34/rds-mb425-geogscratch/adf10/FORCINGS/&
 &CRUJRA_2.1/CRUJRA2020/'//TRIM(var_name)//'/crujra.v2.1.5d.'&
 &//TRIM(var_name)//'.'//char_year//'.365d.noc.nc'
 write (*,*) 'Reading from ',trim(file_name)
